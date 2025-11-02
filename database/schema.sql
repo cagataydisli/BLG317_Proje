@@ -1,4 +1,12 @@
 -- schema.sql (MySQL 8.0+) — Single file schema for all tables
+
+-- Create database
+CREATE DATABASE IF NOT EXISTS `bsl_database` 
+DEFAULT CHARACTER SET utf8mb4 
+COLLATE utf8mb4_unicode_ci;
+
+USE `bsl_database`;
+
 -- Charset & SQL mode
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 SET sql_mode = 'STRICT_ALL_TABLES,ONLY_FULL_GROUP_BY';
