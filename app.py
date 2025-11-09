@@ -117,8 +117,9 @@ def players_page():
 @app.route('/teams')
 def teams_page():
     # Burada veritabanından takım verileri çekilecek
+    all_teams = Teams.query.all()
     # Şimdilik taslak sayfayı göster:
-    return render_template('teams.html')
+    return render_template('teams.html', teams=all_teams)
 
 # 3. Maçlar (Celil Aslan)
 @app.route('/matches')
