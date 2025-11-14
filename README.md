@@ -85,3 +85,28 @@ Haftalık commit zorunluluğunu karşılamak için her üyenin tamamlaması gere
     * [ ] Yaptığı değişiklikleri GitHub'a push etmek.
 
 *(Not: `app.py` dosyasını birden fazla kişi düzenleyeceği için `git pull` yapmayı unutmayın!)*
+
+
+# proje dizinine gir
+
+# 1) Image'ları build edip tüm servisi arka planda başlat (db + web)
+docker compose up -d --build
+
+# 2) web container loglarını takip et (init_db ve app loglarını göreceksiniz)
+docker compose logs -f web
+
+# 3) container durumunu kontrol et
+docker compose ps
+
+# 4) (isteğe bağlı) init_db.py'yi manuel çalıştırmak isterseniz
+docker compose run --rm web python init_db.py
+
+# 5) Veritabanını doğrudan kontrol (psql ile)
+docker compose exec db psql -U myuser -d mydb -c "SELECT * FROM standings LIMIT 5;"
+
+# 6) Servisleri durdurmak / kaldırmak
+docker compose down            # containers + network kaldırır, veriler kalır
+docker compose down -v         # volumes dahil kaldırır (DB verisi silinir)
+
+# 7) Sadece web'i yeniden build etmek isterseniz
+docker compose build web && docker compose up -d web

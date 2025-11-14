@@ -3,4 +3,10 @@ __pycache__/
 *.pyc
 .env
 venv/
-*.sqlite
+
+# postgres docker volume
+pgdata/
+
+# IDE
+.vscode/
+.idea/

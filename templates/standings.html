@@ -5,6 +5,22 @@
     <title>Title</title>
 </head>
 <body>
-
+<table>
+  <thead>
+    <tr>
+      <th>League</th><th>Rank</th><th>Team</th><th>Points</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in standings %}
+    <tr>
+      <td>{{ row.league }}</td>
+      <td>{{ row.team_rank }}</td>
+      <td>{{ row.team_name }}</td>
+      <td>{{ row.team_total_points }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
 </body>
 </html>

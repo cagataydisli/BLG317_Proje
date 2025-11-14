@@ -1,41 +1,141 @@
-from app import app, db, Teams, Players
+# ...existing code...
 import os
+import csv
+import re
+from dataclasses import dataclass
+from typing import List, Optional, Callable, Tuple
+from psycopg2.extras import execute_values
+import database.db as db_api
 
-DATABASE_FILE = 'database.db'
+@dataclass
+class TableSpec:
+    name: str                      # table name in DB
+    ddl: str                       # CREATE TABLE ... SQL
+    columns: List[str]             # column names in CSV and INSERT
+    csv_path: Optional[str] = None # path to CSV file (optional)
+    truncate: bool = True          # truncate before insert
+    converter: Optional[Callable[[dict], Tuple]] = None
+    # converter: function(row_dict) -> tuple(values) if custom conversion needed
 
-print("Uygulama bağlamı açılıyor...")
-with app.app_context():
-    # Adım 1: Mevcut DB dosyasını sil (varsa)
-    if os.path.exists(DATABASE_FILE):
-        print("Mevcut 'database.db' dosyası siliniyor...")
-        os.remove(DATABASE_FILE)
+def _extract_first_int(s: str) -> Optional[int]:
+    if s is None:
+        return None
+    m = re.search(r'-?\d+', s)
+    return int(m.group()) if m else None
 
-    # Adım 2: Tabloları sıfırdan oluştur
-    print("Tablolar oluşturuluyor (db.create_all)...")
-    db.create_all()
+def _default_row_converter(row: dict, columns: List[str]):
+    vals = []
+    for col in columns:
+        v = row.get(col)
+        if v is None or v == "":
+            vals.append(None)
+        else:
+            # numeric normalization: extract first integer if present
+            if col not in ("league", "team_name"):
+                n = _extract_first_int(v)
+                if n is not None:
+                    vals.append(n)
+                    continue
+                # try float fallback
+                try:
+                    vals.append(int(float(v)))
+                    continue
+                except Exception:
+                    vals.append(None)
+                    continue
+            vals.append(v)
+    return tuple(vals)
 
-    print("Veriler oluşturuluyor...")
-    try:
-        # 1. Takımlar
-        takim1 = Teams(team_name="Anadolu Efes", team_city="İstanbul", team_year=1976)
-        takim2 = Teams(team_name="Fenerbahçe Beko", team_city="İstanbul", team_year=1913)
+def load_csv_using_conn(conn, spec: TableSpec) -> int:
+    if not spec.csv_path or not os.path.exists(spec.csv_path):
+        print(f"[init_db] CSV not found for {spec.name}: {spec.csv_path} — skipping CSV load")
+        return 0
 
-        # 2. Oyuncular
-        player1 = Players(player_name="Shane Larkin", player_birthdate="1992-10-02", player_height=182, team=takim1)
-        player2 = Players(player_name="Scottie Wilbekin", player_birthdate="1993-04-05", player_height=188, team=takim2)
-        player3 = Players(player_name="Melih Mahmutoğlu", player_birthdate="1990-05-12", player_height=191, team=takim2)
+    with conn.cursor() as cur, open(spec.csv_path, newline='', encoding='utf-8') as fh:
+        reader = csv.DictReader(fh)
+        rows = []
+        for r in reader:
+            if spec.converter:
+                rows.append(spec.converter(r))
+            else:
+                rows.append(_default_row_converter(r, spec.columns))
 
-        print("Veriler oturuma ekleniyor...")
-        db.session.add_all([takim1, takim2, player1, player2, player3])
+        if spec.truncate:
+            cur.execute(f"TRUNCATE TABLE {spec.name};")
 
-        print("Değişiklikler veritabanına kaydediliyor (commit)...")
-        db.session.commit()
+        insert_sql = f"INSERT INTO {spec.name} ({', '.join(spec.columns)}) VALUES %s"
+        if rows:
+            execute_values(cur, insert_sql, rows)
+    return len(rows)
 
-        print("\n--- BAŞARILI ---")
-        print("Veritabanı oluşturuldu ve 2 takım, 3 oyuncu eklendi.")
+def ensure_table_and_load(spec: TableSpec) -> int:
+    # create table
+    print(f"[init_db] Ensuring table {spec.name} ...")
+    db_api.execute(spec.ddl)
+    # if CSV given, bulk load
+    if spec.csv_path:
+        conn = db_api.get_conn()
+        try:
+            count = load_csv_using_conn(conn, spec)
+            conn.commit()
+            print(f"[init_db] Loaded {count} rows into {spec.name}")
+            return count
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            db_api.put_conn(conn)
+    return 0
 
-    except Exception as e:
-        print(f"\n--- BİR HATA OLDU ---: {e}")
-        db.session.rollback()
+# --- register table specs here ---
+BASE_DIR = os.path.dirname(__file__)
+TABLE_SPECS: List[TableSpec] = [
+    TableSpec(
+        name="standings",
+        ddl="""
+CREATE TABLE IF NOT EXISTS standings (
+  league TEXT NOT NULL,
+  team_rank INTEGER,
+  team_name TEXT,
+  team_matches_played INTEGER,
+  team_wins INTEGER,
+  team_losses INTEGER,
+  team_points_scored INTEGER,
+  team_points_conceded INTEGER,
+  team_home_points INTEGER,
+  team_home_goal_difference INTEGER,
+  team_total_goal_difference INTEGER,
+  team_total_points INTEGER
+);
+""",
+        columns=[
+          "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
+          "team_points_scored","team_points_conceded","team_home_points",
+          "team_home_goal_difference","team_total_goal_difference","team_total_points"
+        ],
+        csv_path=os.path.join(BASE_DIR, "tables", "standings.csv")
+    ),
 
-print("İşlem tamamlandı.")
+    # örnek: diğer tabloları buraya ekleyin
+    # TableSpec(
+    #     name="teams",
+    #     ddl="CREATE TABLE IF NOT EXISTS teams (id SERIAL PRIMARY KEY, team_name TEXT UNIQUE, city TEXT);",
+    #     columns=["id","team_name","city"],
+    #     csv_path=os.path.join(BASE_DIR, "tables", "teams.csv")
+    # ),
+]
+
+def init_db():
+    total = 0
+    for spec in TABLE_SPECS:
+        try:
+            total += ensure_table_and_load(spec)
+        except Exception as e:
+            print(f"[init_db] ERROR initializing {spec.name}: {e}")
+            raise
+    print(f"[init_db] Initialization complete. Total rows inserted: {total}")
+
+if __name__ == "__main__":
+    init_db()
+    print("Database initialization finished.")
+# ...existing code...
