@@ -1,112 +1,141 @@
-# init_db.py (Yeni .xlsx'ten dönen CSV dosyaları için güncellendi)
-
-import pandas as pd
+# ...existing code...
 import os
-from app import app, db, Teams, Players
-# Henüz kullanmasak da diğer modelleri de import edelim
-from app import Matches, TechnicalStaff, Standings
-import numpy as np  # Sayısal işlemler için (NaN kontrolü vb.)
+import csv
+import re
+from dataclasses import dataclass
+from typing import List, Optional, Callable, Tuple
+from psycopg2.extras import execute_values
+import database.db as db_api
 
-# --- CSV Dosya Yolları ---
-basedir = os.path.abspath(os.path.dirname(__file__))
-TABLES_FOLDER_PATH = os.path.join(basedir, 'tables')
+@dataclass
+class TableSpec:
+    name: str                      # table name in DB
+    ddl: str                       # CREATE TABLE ... SQL
+    columns: List[str]             # column names in CSV and INSERT
+    csv_path: Optional[str] = None # path to CSV file (optional)
+    truncate: bool = True          # truncate before insert
+    converter: Optional[Callable[[dict], Tuple]] = None
+    # converter: function(row_dict) -> tuple(values) if custom conversion needed
 
-TEAMS_CSV_PATH = os.path.join(TABLES_FOLDER_PATH, 'team_data.csv')
-PLAYERS_CSV_PATH = os.path.join(TABLES_FOLDER_PATH, 'player_data.csv')
+def _extract_first_int(s: str) -> Optional[int]:
+    if s is None:
+        return None
+    m = re.search(r'-?\d+', s)
+    return int(m.group()) if m else None
 
-print("Uygulama bağlamı açılıyor...")
-with app.app_context():
-    # Adım 1: Mevcut tabloları sil ve oluştur
-    print("Mevcut MySQL tabloları siliniyor (drop_all)...")
-    db.drop_all()
-    print("Tablolar yeniden oluşturuluyor (create_all)...")
-    db.create_all()
+def _default_row_converter(row: dict, columns: List[str]):
+    vals = []
+    for col in columns:
+        v = row.get(col)
+        if v is None or v == "":
+            vals.append(None)
+        else:
+            # numeric normalization: extract first integer if present
+            if col not in ("league", "team_name"):
+                n = _extract_first_int(v)
+                if n is not None:
+                    vals.append(n)
+                    continue
+                # try float fallback
+                try:
+                    vals.append(int(float(v)))
+                    continue
+                except Exception:
+                    vals.append(None)
+                    continue
+            vals.append(v)
+    return tuple(vals)
 
-    try:
-        # --- BÖLÜM 1: Takımları Yükle (ÖNCE BU YAPILMALI) ---
-        print(f"\n{TEAMS_CSV_PATH} dosyasından takımlar okunuyor...")
+def load_csv_using_conn(conn, spec: TableSpec) -> int:
+    if not spec.csv_path or not os.path.exists(spec.csv_path):
+        print(f"[init_db] CSV not found for {spec.name}: {spec.csv_path} — skipping CSV load")
+        return 0
 
-        # 'team_id'nin benzersiz (unique) olmasını sağlamamız lazım
-        # Aynı team_id'ye sahip kayıtlar varsa, ilkini al
-        teams_df = pd.read_csv(TEAMS_CSV_PATH)
-        teams_df = teams_df.drop_duplicates(subset=['team_id'], keep='first')
-
-        team_objects = []
-        for index, row in teams_df.iterrows():
-            # CSV'deki sütun adlarına göre modelimizi eşleştiriyoruz
-            new_team = Teams(
-                team_id=row['team_id'],  # PK'yı doğrudan CSV'den alıyoruz
-                team_name=row['team_name'],
-                team_city=row['team_city'],
-                team_year=row['team_year']
-            )
-            team_objects.append(new_team)
-
-        # ÖNEMLİ: PK'yı manuel atadığımız için 'bulk_save_objects' yerine 'add_all'
-        # ve 'commit' kullanmak daha güvenli olabilir, ancak 'bulk' daha hızlıdır.
-        db.session.add_all(team_objects)
-        db.session.commit()  # Takımlar eklendi, artık oyuncular eklenebilir.
-
-        print(f"{len(team_objects)} benzersiz takım başarıyla veritabanına eklendi.")
-
-        # --- BÖLÜM 2: Oyuncuları Yükle (SENİN TABLON) ---
-        print(f"\n{PLAYERS_CSV_PATH} dosyasından oyuncular okunuyor...")
-
-        # Benzersiz oyuncular
-        players_df = pd.read_csv(PLAYERS_CSV_PATH)
-        players_df = players_df.drop_duplicates(subset=['player_id'], keep='first')
-
-        # Az önce eklediğimiz takımların ID'lerini bir set olarak alalım
-        # Sadece veritabanında var olan takımlara oyuncu ekleyebiliriz
-        valid_team_ids = {team.team_id for team in team_objects}
-
-        player_objects = []
-        atlanan_oyuncu_sayisi = 0
-
-        for index, row in players_df.iterrows():
-            # Oyuncunun CSV'deki team_id'si, Takımlar tablomuzda var mı?
-            if row['team_id'] not in valid_team_ids:
-                # print(f"UYARI: {row['team_id']} ID'li takım bulunamadı. Oyuncu '{row['player_name']}' atlanıyor.")
-                atlanan_oyuncu_sayisi += 1
-                continue
-
-            # Veritabanı modelin 'player_height' için Integer (sayı) bekliyor.
-            # CSV'de 'unknown' gibi metinler olabilir, bunları temizlemeliyiz.
-            player_height_raw = str(row['player_height'])
-            player_height_clean = ''.join(filter(str.isdigit, player_height_raw))
-
-            if player_height_clean:
-                player_height = int(player_height_clean)
+    with conn.cursor() as cur, open(spec.csv_path, newline='', encoding='utf-8') as fh:
+        reader = csv.DictReader(fh)
+        rows = []
+        for r in reader:
+            if spec.converter:
+                rows.append(spec.converter(r))
             else:
-                player_height = None  # Eğer 'unknown' ise veritabanında NULL (boş) olsun
+                rows.append(_default_row_converter(r, spec.columns))
 
-            # CSV'deki sütun adlarına göre modelimizi eşleştiriyoruz
-            new_player = Players(
-                player_id=row['player_id'],  # PK'yı doğrudan CSV'den alıyoruz
-                player_name=row['player_name'],
-                player_birthdate=str(row['player_birthdate']),  # String olarak alıyoruz
-                player_height=player_height,  # Temizlenmiş sayı
-                team_id=row['team_id']  # FK'yı (Yabancı Anahtar) doğrudan alıyoruz
-            )
-            player_objects.append(new_player)
+        if spec.truncate:
+            cur.execute(f"TRUNCATE TABLE {spec.name};")
 
-        db.session.add_all(player_objects)
-        db.session.commit()
+        insert_sql = f"INSERT INTO {spec.name} ({', '.join(spec.columns)}) VALUES %s"
+        if rows:
+            execute_values(cur, insert_sql, rows)
+    return len(rows)
 
-        print(f"{len(player_objects)} oyuncu başarıyla veritabanına eklendi.")
-        if atlanan_oyuncu_sayisi > 0:
-            print(f"({atlanan_oyuncu_sayisi} oyuncu, takım ID'si eşleşmediği için atlandı.)")
+def ensure_table_and_load(spec: TableSpec) -> int:
+    # create table
+    print(f"[init_db] Ensuring table {spec.name} ...")
+    db_api.execute(spec.ddl)
+    # if CSV given, bulk load
+    if spec.csv_path:
+        conn = db_api.get_conn()
+        try:
+            count = load_csv_using_conn(conn, spec)
+            conn.commit()
+            print(f"[init_db] Loaded {count} rows into {spec.name}")
+            return count
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            db_api.put_conn(conn)
+    return 0
 
-        print("\n--- BAŞARIYLA TAMAMLANDI ---")
-        print("Veritabanı oluşturuldu ve CSV verileri başarıyla yüklendi.")
+# --- register table specs here ---
+BASE_DIR = os.path.dirname(__file__)
+TABLE_SPECS: List[TableSpec] = [
+    TableSpec(
+        name="standings",
+        ddl="""
+CREATE TABLE IF NOT EXISTS standings (
+  league TEXT NOT NULL,
+  team_rank INTEGER,
+  team_name TEXT,
+  team_matches_played INTEGER,
+  team_wins INTEGER,
+  team_losses INTEGER,
+  team_points_scored INTEGER,
+  team_points_conceded INTEGER,
+  team_home_points INTEGER,
+  team_home_goal_difference INTEGER,
+  team_total_goal_difference INTEGER,
+  team_total_points INTEGER
+);
+""",
+        columns=[
+          "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
+          "team_points_scored","team_points_conceded","team_home_points",
+          "team_home_goal_difference","team_total_goal_difference","team_total_points"
+        ],
+        csv_path=os.path.join(BASE_DIR, "tables", "standings.csv")
+    ),
 
-    except FileNotFoundError as e:
-        print(f"\n--- HATA: Dosya Bulunamadı ---: {e}")
-        print("Lütfen 'team_data...csv' ve 'player_data...csv' dosyalarının 'tables' klasöründe olduğundan emin ol.")
-        db.session.rollback()
-    except Exception as e:
-        print(f"\n--- BİR HATA OLDU ---: {e}")
-        print("Lütfen hatayı kontrol et.")
-        db.session.rollback()
+    # örnek: diğer tabloları buraya ekleyin
+    # TableSpec(
+    #     name="teams",
+    #     ddl="CREATE TABLE IF NOT EXISTS teams (id SERIAL PRIMARY KEY, team_name TEXT UNIQUE, city TEXT);",
+    #     columns=["id","team_name","city"],
+    #     csv_path=os.path.join(BASE_DIR, "tables", "teams.csv")
+    # ),
+]
 
-print("İşlem tamamlandı.")
+def init_db():
+    total = 0
+    for spec in TABLE_SPECS:
+        try:
+            total += ensure_table_and_load(spec)
+        except Exception as e:
+            print(f"[init_db] ERROR initializing {spec.name}: {e}")
+            raise
+    print(f"[init_db] Initialization complete. Total rows inserted: {total}")
+
+if __name__ == "__main__":
+    init_db()
+    print("Database initialization finished.")
+# ...existing code...
