@@ -10,7 +10,7 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 app = Flask(__name__)
 
 # Veritabanı dosyasının yolu ve adı
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'database.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:@localhost/blg317_proje'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False # Gereksiz uyarıları kapatır
 
 # Veritabanı nesnesini (db) Flask uygulamamıza bağlıyoruz
@@ -104,14 +104,22 @@ def index():
 # Herkes kendi sorumluluğundaki bölümü geliştirecek.
 
 # 1. Oyuncular (Çağatay Dişli)
+# '/players' artık ana menüyü gösteriyor
 @app.route('/players')
 def players_page():
-    # Burada veritabanından oyuncu verileri çekilecek
-    # Bu komut, 'Players' tablosundaki tüm oyuncuları çeker ve bir liste olarak döndürür.
+    # Bu fonksiyon artık veritabanı sorgusu yapmıyor.
+    # Sadece 'players.html' menü sayfasını gösteriyor.
+    return render_template('players.html')
+
+
+# '/players/table' tabloyu gösteren YENİ route
+@app.route('/players/table')
+def players_table():
+    # Veritabanından tüm oyuncuları çekme işini artık bu fonksiyon yapıyor.
     all_players = Players.query.all()
 
-    # 'all_players' listesini 'players' adıyla HTML şablonuna gönderiyoruz.
-    return render_template('players.html', players=all_players)
+    # Veriyi yeni 'players_table.html' şablonuna gönderiyoruz.
+    return render_template('players_table.html', players=all_players)
 
 # 2. Takımlar (Talip Demir)
 @app.route('/teams')

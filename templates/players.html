@@ -1,41 +1,19 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>Oyuncular</title>
-    <style>
-        table { width: 80%; border-collapse: collapse; margin: 20px auto; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-    </style>
-</head>
-<body>
-    <h1>Oyuncular Listesi</h1>
-
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>İsim</th>
-                <th>Doğum Tarihi</th>
-                <th>Boy (cm)</th>
-                <th>Takım Adı</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for player in players %}
-            <tr>
-                <td>{{ player.player_id }}</td>
-                <td>{{ player.player_name }}</td>
-                <td>{{ player.player_birthdate }}</td>
-                <td>{{ player.player_height }}</td>
-                <td>{{ player.team.team_name }}</td>
-            </tr>
-            {% endfor %}
-            </tbody>
-    </table>
-
-</body>
-</html>
+{% block content %}
+    <h2>Oyuncu İşlemleri Kontrol Paneli</h2>
+    <p>Lütfen yapmak istediğiniz işlemi seçin:</p>
+    
+    <ul>
+        <li>
+            <a href="/players/table">Tüm Oyuncuları Listele (Tablo)</a>
+        </li>
+        <li>
+            <a href="#" style="color: grey; text-decoration: none;">Oyuncu Ekle (Yakında)</a>
+        </li>
+        <li>
+            <a href="#" style="color: grey; text-decoration: none;">Oyuncu Çıkart (Yakında)</a>
+        </li>
+        <li>
+            <a href="#" style="color: grey; text-decoration: none;">Oyuncu Ara (Yakında)</a>
+        </li>
+    </ul>
+{% endblock %}
