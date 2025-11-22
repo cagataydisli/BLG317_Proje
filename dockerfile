@@ -13,7 +13,9 @@ COPY . .
 # entrypoint script çalıştırılacak
 COPY entrypoint.sh /app/entrypoint.sh
 COPY wait_for_db.py /app/wait_for_db.py
-RUN chmod +x /app/entrypoint.sh
+
+# KRİTİK DÜZELTME: Windows (CRLF) karakterlerini temizle ve çalıştırma izni ver
+RUN sed -i 's/\r$//g' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["flask", "run", "--host=0.0.0.0"]

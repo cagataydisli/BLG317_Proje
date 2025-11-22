@@ -18,14 +18,39 @@ def index():
 # '/players' artık ana menüyü gösteriyor
 @app.route('/players')
 def players_page():
+    try:
+        # HTML'deki sıraya göre verileri çekiyoruz:
+        # 0: ID, 1: İsim, 2: Doğum, 3: Boy, 4: Takım Adı, 5: Takım ID
+        sql = """
+            SELECT 
+                P.player_id, 
+                P.player_name, 
+                P.player_birthdate, 
+                P.player_height, 
+                T.team_name, 
+                P.team_id
+            FROM Players P
+            LEFT JOIN Teams T ON P.team_id = T.team_id
+            LIMIT 500
+        """
+        all_players = db_api.query(sql)
+    except Exception as e:
+        print(f"Hata: {e}")
+        all_players = []
 
-    # Veriyi yeni 'players_table.html' şablonuna gönderiyoruz.
     return render_template('players_table.html', players=all_players)
 
 # 2. Takımlar (Talip Demir)
 @app.route('/teams')
 def teams_page():
-    # Şimdilik taslak sayfayı göster:
+    # Veritabanından takımları çekelim (Teams tablosunu doldurmuştuk!)
+    try:
+        # db_api.query fonksiyonu db.py dosyasından geliyor olmalı
+        all_teams = db_api.query("SELECT * FROM Teams")
+    except Exception as e:
+        print(f"Hata: {e}")
+        all_teams = []
+
     return render_template('teams.html', teams=all_teams)
 
 # 3. Maçlar (Celil Aslan)

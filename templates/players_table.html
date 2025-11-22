@@ -28,15 +28,9 @@
         <tbody>
             {% for player in players %}
             <tr>
-                <td>{{ player.player_id }}</td>
-                <td>{{ player.player_name }}</td>
-                <td>{{ player.player_birthdate }}</td>
-                <td>{{ player.player_height }}</td>
-                <td>{{ player.team.team_name }}</td>
-                <td>{{ player.team_id }}</td>
-            </tr>
+                <td>{{ player[0] }}</td> <td>{{ player[1] }}</td> <td>{{ player[2] }}</td> <td>{{ player[3] }}</td> <td>{{ player[4] }}</td> <td>{{ player[5] }}</td> </tr>
             {% endfor %}
-            </tbody>
+        </tbody>
     </table>
 
 </body>
