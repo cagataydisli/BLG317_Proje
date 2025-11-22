@@ -1,19 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Oyuncu İşlemleri{% endblock %}
+
 {% block content %}
+<div class="container mt-4">
     <h2>Oyuncu İşlemleri Kontrol Paneli</h2>
     <p>Lütfen yapmak istediğiniz işlemi seçin:</p>
     
-    <ul>
-        <li>
-            <a href="/players/table">Tüm Oyuncuları Listele (Tablo)</a>
-        </li>
-        <li>
-            <a href="#" style="color: grey; text-decoration: none;">Oyuncu Ekle (Yakında)</a>
-        </li>
-        <li>
-            <a href="#" style="color: grey; text-decoration: none;">Oyuncu Çıkart (Yakında)</a>
-        </li>
-        <li>
-            <a href="#" style="color: grey; text-decoration: none;">Oyuncu Ara (Yakında)</a>
-        </li>
-    </ul>
+    <div class="list-group">
+        <a href="/players/table" class="list-group-item list-group-item-action">
+            📋 Tüm Oyuncuları Listele (Tablo)
+        </a>
+        
+        <a href="#" class="list-group-item list-group-item-action disabled" aria-disabled="true">
+            ➕ Oyuncu Ekle (Yakında)
+        </a>
+        <a href="#" class="list-group-item list-group-item-action disabled" aria-disabled="true">
+            ❌ Oyuncu Çıkart (Yakında)
+        </a>
+        <a href="#" class="list-group-item list-group-item-action disabled" aria-disabled="true">
+            🔍 Oyuncu Ara (Yakında)
+        </a>
+    </div>
+    
+    <div class="mt-3">
+        <a href="/" class="btn btn-secondary">Ana Sayfaya Dön</a>
+    </div>
+</div>
 {% endblock %}

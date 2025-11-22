@@ -1,20 +1,84 @@
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <title>BSL Veritabanı Projesi</title>
-</head>
-<body>
-    <h1>BLG 317E - Veritabanı Projesi</h1>
-    <h2>Basketbol Süper Ligi Yönetim Sistemi</h2>
-    <nav>
-        <ul>
-            <li><a href="/players">Oyuncular</a></li>
-            <li><a href="/teams">Takımlar</a></li>
-            <li><a href="/matches">Maçlar</a></li>
-            <li><a href="/staff">Teknik Ekip</a></li>
-            <li><a href="/standings">Puan Durumu</a></li>
-        </ul>
-    </nav>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Home - Basketball DB{% endblock %}
+
+{% block content %}
+<div class="container">
+    
+    <div class="p-5 mb-4 bg-light rounded-3 shadow-sm">
+        <div class="container-fluid py-2">
+            <h1 class="display-5 fw-bold">🏀 Basketball Database</h1>
+            <p class="col-md-8 fs-4">Welcome to the Basketball Super League data management system. Use the cards below to access and operate on database tables.</p>
+        </div>
+    </div>
+
+    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+        
+        <div class="col">
+            <div class="card h-100 shadow-sm border-primary">
+                <div class="card-body text-center">
+                    <div class="display-4 mb-3">🏃‍♂️</div>
+                    <h5 class="card-title">Players</h5>
+                    <p class="card-text">List of all players, physical attributes, and team information.</p>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 text-center pb-3">
+                    <a href="/players" class="btn btn-primary w-75">List Players</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col">
+            <div class="card h-100 shadow-sm border-success">
+                <div class="card-body text-center">
+                    <div class="display-4 mb-3">🛡️</div>
+                    <h5 class="card-title">Teams</h5>
+                    <p class="card-text">Teams in the league, cities, foundation years, and arena information.</p>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 text-center pb-3">
+                    <a href="/teams" class="btn btn-success w-75">List Teams</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col">
+            <div class="card h-100 shadow-sm border-danger">
+                <div class="card-body text-center">
+                    <div class="display-4 mb-3">📅</div>
+                    <h5 class="card-title">Matches & Fixtures</h5>
+                    <p class="card-text">Scores, dates, and week information of played matches.</p>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 text-center pb-3">
+                    <a href="/matches" class="btn btn-danger w-75">List Matches</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col">
+            <div class="card h-100 shadow-sm border-warning">
+                <div class="card-body text-center">
+                    <div class="display-4 mb-3">👔</div>
+                    <h5 class="card-title">Technical Staff</h5>
+                    <p class="card-text">Head coaches, assistant coaches, and technical staff of the teams.</p>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 text-center pb-3">
+                    <a href="/staff" class="btn btn-warning w-75">List Staff</a>
+                </div>
+            </div>
+        </div>
+
+        <div class="col">
+            <div class="card h-100 shadow-sm border-info">
+                <div class="card-body text-center">
+                    <div class="display-4 mb-3">🏆</div>
+                    <h5 class="card-title">Standings</h5>
+                    <p class="card-text">League ranking, win/loss records, and statistics.</p>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 text-center pb-3">
+                    <a href="/standings" class="btn btn-info w-75 text-white">View Standings</a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
