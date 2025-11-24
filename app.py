@@ -177,7 +177,9 @@ def staff_page():
             "league": row[3]
         })
 
+    # BURASI ÖNEMLİ
     return render_template('staff.html', staff=staff)
+
 
 # 5. Puan Durumu (Emir Şahin)
 @app.route('/standings')
