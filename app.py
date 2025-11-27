@@ -1,5 +1,5 @@
 # app.py
-from flask import request, Flask, render_template, jsonify
+from flask import request, Flask, render_template, jsonify, redirect, url_for
 import database.db as db_api
 
 app = Flask(__name__)
@@ -12,27 +12,80 @@ def index():
 # 1. Oyuncular (Çağatay Dişli)
 @app.route('/players')
 def players_page():
+    # Güncel sorgu: Hem takım linkini hem de lig bilgisini içeriyor
+    query = """
+        SELECT 
+            p.player_id, 
+            p.player_name, 
+            p.player_height, 
+            p.player_birthdate, 
+            p.league, 
+            t.team_name,
+            p.team_url
+        FROM players p
+        LEFT JOIN teams t ON p.team_id = t.team_id
+        ORDER BY t.team_name, p.player_name
+        LIMIT 500
+    """
     try:
-        # HTML'deki sıraya göre verileri çekiyoruz:
-        # 0: ID, 1: İsim, 2: Doğum, 3: Boy, 4: Takım Adı, 5: Takım ID
-        sql = """
-            SELECT 
-                P.player_id, 
-                P.player_name, 
-                P.player_birthdate, 
-                P.player_height, 
-                T.team_name, 
-                P.team_id
-            FROM Players P
-            LEFT JOIN Teams T ON P.team_id = T.team_id
-            LIMIT 500
-        """
-        all_players = db_api.query(sql)
+        rows = db_api.query(query)
     except Exception as e:
         print(f"Hata: {e}")
-        all_players = []
+        rows = []
 
-    return render_template('players_table.html', players=all_players)
+    # Veriyi Tuple'dan Dictionary'e çeviriyoruz (HTML'de isimle erişmek için)
+    players = []
+    for row in rows:
+        players.append({
+            "player_id": row[0],
+            "player_name": row[1],
+            "player_height": row[2],
+            "player_birthdate": row[3],
+            "league": row[4],
+            "team_name": row[5],
+            "team_url": row[6]
+        })
+
+    return render_template('players_table.html', players=players)
+
+
+# --- YENİ OYUNCU EKLEME ---
+@app.route('/players/add', methods=['POST'])
+def add_player():
+    try:
+        data = request.form
+        player_id = data.get('player_id')
+        player_name = data.get('player_name')
+        team_id = data.get('team_id')
+        height = data.get('player_height')
+        birthdate = data.get('player_birthdate')
+        league = data.get('league')
+
+        # SQL Ekleme Sorgusu
+        sql = """
+            INSERT INTO Players (player_id, player_name, team_id, player_height, player_birthdate, league)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """
+
+        if not team_id:
+            team_id = None
+
+        db_api.execute(sql, (player_id, player_name, team_id, height, birthdate, league))
+
+        return redirect(url_for('players_page'))
+    except Exception as e:
+        return f"Ekleme Hatası: {e}"
+
+
+# --- OYUNCU SİLME ---
+@app.route('/players/delete/<int:player_id>', methods=['POST'])
+def delete_player(player_id):
+    try:
+        sql = "DELETE FROM Players WHERE player_id = %s"
+        db_api.execute(sql, (player_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 def players_menu():
     return render_template('players.html')
