@@ -46,12 +46,31 @@ def _default_row_converter(row: dict, columns: List[str]):
             vals.append(v)
     return tuple(vals)
 
+def _matches_row_converter(row: dict):
+    """Converter for matches table with date and time fields"""
+    match_id = row.get("match_id", "").strip()
+    if not match_id:
+        match_id = None  # Bu durumda hata verecek ama en azından nedenini göreceğiz
+    return (
+        match_id,
+        _extract_first_int(row.get("home_team_id")),
+        _extract_first_int(row.get("away_team_id")),
+        row.get("match_date") if row.get("match_date") else None,  # keep as string for PostgreSQL
+        row.get("match_hour") if row.get("match_hour") else None,  # keep as string for PostgreSQL
+        _extract_first_int(row.get("home_score")),
+        _extract_first_int(row.get("away_score")),
+        row.get("league") if row.get("league") else None,
+        row.get("match_week") if row.get("match_week") else None,
+        row.get("match_city") if row.get("match_city") else None,
+        row.get("match_saloon") if row.get("match_saloon") else None
+    )
+
 def load_csv_using_conn(conn, spec: TableSpec) -> int:
     if not spec.csv_path or not os.path.exists(spec.csv_path):
         print(f"[init_db] CSV not found for {spec.name}: {spec.csv_path} — skipping CSV load")
         return 0
 
-    with conn.cursor() as cur, open(spec.csv_path, newline='', encoding='utf-8') as fh:
+    with conn.cursor() as cur, open(spec.csv_path, newline='', encoding='utf-8-sig') as fh:
         reader = csv.DictReader(fh)
         rows = []
         for r in reader:
@@ -114,6 +133,30 @@ CREATE TABLE IF NOT EXISTS standings (
           "team_home_goal_difference","team_total_goal_difference","team_total_points"
         ],
         csv_path=os.path.join(BASE_DIR, "tables", "standings.csv")
+    ),
+
+    # Matches table (Celil Aslan)
+    TableSpec(
+        name="matches",
+        ddl="""
+CREATE TABLE IF NOT EXISTS matches (
+  match_id TEXT PRIMARY KEY,
+  home_team_id INTEGER,
+  away_team_id INTEGER,
+  match_date DATE,
+  match_hour TIME,
+  home_score INTEGER,
+  away_score INTEGER,
+  league TEXT,
+  match_week TEXT,
+  match_city TEXT,
+  match_saloon TEXT
+);
+""",
+        columns=["match_id", "home_team_id", "away_team_id", "match_date", "match_hour", 
+                 "home_score", "away_score", "league", "match_week", "match_city", "match_saloon"],
+        csv_path=os.path.join(BASE_DIR, "tables", "matches.csv"),
+        converter=_matches_row_converter
     ),
 
     # örnek: diğer tabloları buraya ekleyin

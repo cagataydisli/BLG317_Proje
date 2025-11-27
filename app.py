@@ -31,8 +31,42 @@ def teams_page():
 # 3. Maçlar (Celil Aslan)
 @app.route('/matches')
 def matches_page():
-    # Şimdilik taslak sayfayı göster:
-    return render_template('matches.html')
+    # Sıralama ve filtreleme parametreleri
+    allowed_cols = {
+        "match_id", "match_date", "match_hour", "home_team_id", "away_team_id",
+        "home_score", "away_score", "league", "match_week", "match_city", "match_saloon"
+    }
+    
+    sort = request.args.get('sort', 'match_date')
+    if sort not in allowed_cols:
+        sort = 'match_date'
+    
+    order = request.args.get('order', 'desc').lower()
+    order_sql = 'ASC' if order == 'asc' else 'DESC'
+    
+    # Limit parametresi
+    try:
+        limit = int(request.args.get('limit', 100))
+        if limit <= 0 or limit > 10000:
+            limit = 100
+    except ValueError:
+        limit = 100
+    
+    # SQL sorgusu
+    cols = ["match_id", "home_team_id", "away_team_id", "match_date", "match_hour",
+            "home_score", "away_score", "league", "match_week", "match_city", "match_saloon"]
+    select_cols = ", ".join(cols)
+    sql = f"SELECT {select_cols} FROM matches ORDER BY {sort} {order_sql} LIMIT %s"
+    rows = db_api.query(sql, (limit,))
+    
+    # Verileri dictionary listesine çevir
+    matches = [dict(zip(cols, row)) for row in rows]
+    
+    # JSON formatında döndürme seçeneği
+    if request.args.get('format') == 'json':
+        return jsonify(matches)
+    
+    return render_template('matches.html', matches=matches)
 
 # 4. Teknik Ekip (Musa Can Turgut)
 @app.route('/staff')
