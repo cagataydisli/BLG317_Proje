@@ -278,7 +278,7 @@ def init_db():
             total += ensure_table_and_load(spec)
         except Exception as e:
             print(f"[init_db] ERROR initializing {spec.name}: {e}")
-            raise
+            print(f"[init_db] Skipping {spec.name} and continuing...")
     print(f"[init_db] Initialization complete. Total rows inserted: {total}")
 
 

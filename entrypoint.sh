@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-flask run --host=0.0.0.0 --port=5000
+
 echo "Waiting for database..."
 python /app/wait_for_db.py
 

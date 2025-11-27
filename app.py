@@ -166,9 +166,30 @@ def teams_page():
 # 3. Maçlar (Celil Aslan)
 @app.route('/matches')
 def matches_page():
+    # Filtreleme parametreleri
+    sort_by = request.args.get('sort', 'match_date')
+    order = request.args.get('order', 'desc')
+    limit = request.args.get('limit', '100')
+    fmt = request.args.get('format', 'html')
+    
+    # SQL injection koruması
+    allowed_cols = ['match_date', 'match_week', 'league', 'match_city']
+    if sort_by not in allowed_cols:
+        sort_by = 'match_date'
+    
+    if order not in ['asc', 'desc']:
+        order = 'desc'
+    
+    try:
+        limit = int(limit)
+        if limit < 1 or limit > 10000:
+            limit = 100
+    except:
+        limit = 100
+    
     # Maç verilerini çekerken Ev Sahibi ve Deplasman takımlarının isimlerini getirmek için
     # teams tablosuna İKİ KEZ join yapıyoruz (t1: home, t2: away)
-    query = """
+    query = f"""
         SELECT 
             m.match_id,
             m.match_date, 
@@ -179,30 +200,27 @@ def matches_page():
             t2.team_name AS away_team, 
             m.match_saloon, 
             m.league,
-            m.match_week
+            m.match_week,
+            m.match_city,
+            m.home_team_id,
+            m.away_team_id
         FROM matches m
         JOIN teams t1 ON m.home_team_id = t1.team_id
         JOIN teams t2 ON m.away_team_id = t2.team_id
-        ORDER BY m.match_date DESC, m.match_hour ASC
-        LIMIT 100  -- Sayfa çok şişmesin diye limit koyabiliriz
+        ORDER BY m.{sort_by} {order}, m.match_hour ASC
+        LIMIT {limit}
     """
     rows = db_api.query(query)
     
-    matches = []
-    for row in rows:
-        matches.append({
-            "match_id": row[0],
-            "match_date": row[1],
-            "match_hour": row[2],
-            "home_team": row[3],
-            "home_score": row[4],
-            "away_score": row[5],
-            "away_team": row[6],
-            "match_saloon": row[7],
-            "league": row[8],
-            "match_week": row[9]
-        })
-
+    cols = ['match_id', 'match_date', 'match_hour', 'home_team', 'home_score', 
+            'away_score', 'away_team', 'match_saloon', 'league', 'match_week',
+            'match_city', 'home_team_id', 'away_team_id']
+    
+    matches = [dict(zip(cols, row)) for row in rows]
+    
+    if fmt == 'json':
+        return jsonify(matches)
+    
     return render_template('matches.html', matches=matches)
 
 # 4. Teknik Ekip (Musa Can Turgut)
