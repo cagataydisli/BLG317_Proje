@@ -124,43 +124,118 @@ def players_table_page():
     return render_template('players_table.html', players=players)   
 
 
-# 2. Takımlar (Talip Demir)
+# --- 1. ANA MENÜ (Yönlendirme) ---
 @app.route('/teams')
-def teams_page():
-    # Veritabanından takımları çekelim (Teams tablosunu doldurmuştuk!)
-    try:
-        # db_api.query fonksiyonu db.py dosyasından geliyor olmalı
-        all_teams = db_api.query("SELECT * FROM Teams")
-    except Exception as e:
-        print(f"Hata: {e}")
-        all_teams = []
+def teams_menu():
 
-    return render_template('teams.html', teams=all_teams)
+    return redirect(url_for('teams_table_page'))
 
-    # Detaylı takım verilerini team_data tablosundan çekiyoruz
+
+# --- 2. TABLO GÖRÜNÜMÜ (/teams/table) ---
+@app.route('/teams/table')
+def teams_table_page():
+    # Tüm verileri çekiyoruz (En güncel lig en üstte)
     query = """
         SELECT 
-            team_id, team_name, team_city, team_year, 
-            saloon_name, saloon_capacity, league, team_url
-        FROM team_data
-        ORDER BY team_name
+            team_id,
+            staff_id,
+            team_url,
+            team_name,
+            league,
+            team_city,
+            team_year,
+            saloon_name,
+            saloon_capacity,
+            saloon_address
+        FROM Teams
+        ORDER BY league DESC, team_name ASC
     """
-    rows = db_api.query(query)
-    
+
+    try:
+        # db_api.query senin sisteminde çalışıyor
+        rows = db_api.query(query)
+    except Exception as e:
+        print(f"Sorgu Hatası: {e}")
+        rows = []
+
+    # Verileri HTML'e göndermek için sözlüğe çeviriyoruz
     teams = []
     for row in rows:
         teams.append({
             "team_id": row[0],
-            "team_name": row[1],
-            "team_city": row[2],
-            "team_year": row[3],
-            "saloon_name": row[4],
-            "saloon_capacity": row[5],
-            "league": row[6],
-            "team_url": row[7]
+            "staff_id": row[1],
+            "team_url": row[2],
+            "team_name": row[3],
+            "league": row[4],
+            "team_city": row[5],
+            "team_year": row[6],
+            "saloon_name": row[7],
+            "saloon_capacity": row[8],
+            "saloon_address": row[9]
         })
 
+    # teams.html dosyasını render ediyoruz
     return render_template('teams.html', teams=teams)
+
+
+# --- 3. EKLEME İŞLEMİ (/teams/add) ---
+@app.route('/teams/add', methods=['POST'])
+def add_team():
+    try:
+        data = request.form
+        
+        # Form verilerini al
+        t_id = data.get('team_id')
+        t_name = data.get('team_name')
+        t_city = data.get('team_city')
+        t_league = data.get('league')
+        t_url = data.get('team_url')
+        s_name = data.get('saloon_name')
+        s_addr = data.get('saloon_address')
+        
+        # Sayısal verileri işle (Boşsa None yap)
+        # Staff ID
+        s_id = data.get('staff_id')
+        s_id = int(s_id) if s_id and s_id.strip() else None
+            
+        # Kapasite
+        s_cap = data.get('saloon_capacity')
+        s_cap = int(s_cap) if s_cap and s_cap.strip() else None
+
+        # Yıl
+        t_year = data.get('team_year')
+        t_year = int(t_year) if t_year and t_year.strip() else None
+
+        # SQL INSERT Sorgusu
+        query = """
+            INSERT INTO Teams (
+                team_id, team_name, team_city, team_year, league, 
+                staff_id, team_url, saloon_name, saloon_capacity, saloon_address
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+
+        db_api.execute(query, (
+            t_id, t_name, t_city, t_year, t_league, 
+            s_id, t_url, s_name, s_cap, s_addr
+        ))
+        
+        return redirect(url_for('teams_table_page'))
+
+    except Exception as e:
+
+        return f"<h3>Ekleme Başarısız!</h3><p>Hata Detayı: {e}</p><br><a href='/teams/table'>Geri Dön</a>"
+
+
+# --- 4. SİLME İŞLEMİ (/teams/delete/ID) ---
+@app.route('/teams/delete/<int:team_id>', methods=['POST'])
+def delete_team(team_id):
+    try:
+        sql = "DELETE FROM Teams WHERE team_id = %s"
+        db_api.execute(sql, (team_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 # 3. Maçlar (Celil Aslan)

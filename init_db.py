@@ -22,7 +22,8 @@ class TableSpec:
 def _extract_first_int(s: str) -> Optional[int]:
     if s is None:
         return None
-    m = re.search(r'-?\d+', s)
+    clean_s = str(s).replace('.', '').replace(',', '')
+    m = re.search(r'-?\d+', clean_s)
     return int(m.group()) if m else None
 
 
@@ -61,6 +62,28 @@ def _default_row_converter(row: dict, columns: List[str]):
                     continue
             vals.append(v)
     return tuple(vals)
+
+def teams_row_converter(row: dict) -> tuple:
+    # 1. ID, Yıl (Sayı)
+    t_id = _extract_first_int(row.get('team_id'))
+    year = _extract_first_int(row.get('team_year'))
+    
+    # 2. String Alanlar (Şehir, İsim, Lig vb.)
+    url = row.get('team_url')
+    name = row.get('team_name')
+    league = row.get('league')
+    
+    # Şehir ve Salon isimlerini temizle (None gelmesin diye)
+    city = row.get('team_city', '').strip() if row.get('team_city') else None
+    s_name = row.get('saloon_name', '').strip() if row.get('saloon_name') else None
+    addr = row.get('saloon_address', '').strip() if row.get('saloon_address') else None
+    
+    # 3. Kapasite (Özel Temizlik: "2500 Kişi" -> 2500)
+    raw_cap = row.get('saloon_capacity', '')
+    cap = _extract_first_int(raw_cap)
+
+    # Sıralama columns listesiyle aynı olmalı
+    return (t_id, url, name, league, city, year, s_name, cap, addr)
 
 
 def load_csv_using_conn(conn, spec: TableSpec):
@@ -138,14 +161,39 @@ TABLE_SPECS = [
     TableSpec(
         name="Teams",
         ddl="""
-            CREATE TABLE IF NOT EXISTS Teams (
+            DROP TABLE IF EXISTS Teams CASCADE;
+            
+            CREATE TABLE Teams (
                 team_id INT PRIMARY KEY,
-                team_name VARCHAR(100) NOT NULL UNIQUE
+                staff_id INT, 
+                team_url VARCHAR(255),
+                team_name VARCHAR(100),
+                league VARCHAR(64),
+                team_city VARCHAR(64),
+                team_year INT,
+                saloon_name VARCHAR(128),
+                saloon_capacity INT,
+                saloon_address TEXT
             );
         """,
-        columns=["team_id", "team_name"],
+        columns=[
+            "team_id",
+            "team_url",
+            "team_name",
+            "league",
+            "team_city",
+            "team_year",
+            "saloon_name",
+            "saloon_capacity",
+            "saloon_address",
+        ],
         csv_path=os.path.join(BASE_DIR, "tables", "team_data.csv"),
+        converter=teams_row_converter,
     ),
+
+
+
+
 
     # 2. Matches
     TableSpec(
@@ -280,6 +328,32 @@ def init_db():
             print(f"[init_db] ERROR initializing {spec.name}: {e}")
             print(f"[init_db] Skipping {spec.name} and continuing...")
     print(f"[init_db] Initialization complete. Total rows inserted: {total}")
+    try:
+        print("[init_db] Updating Teams with staff_ids from technic_roster...")
+        db_api.execute("""
+            UPDATE Teams
+            SET staff_id = sub.staff_id
+            FROM (
+                SELECT DISTINCT ON (team_id) team_id, staff_id 
+                FROM technic_roster
+            ) AS sub
+            WHERE Teams.team_id = sub.team_id;
+        """)
+        print("[init_db] Teams staff_ids updated.")
+    except Exception as e:
+        print("[init_db] Warning: Could not auto-update staff_ids:", e)
+
+    # Son olarak Foreign Key İlişkisini Ekle
+    try:
+        print("[init_db] Adding Foreign Keys to Teams table...")
+        db_api.execute("""
+            ALTER TABLE Teams       
+            ADD CONSTRAINT fk_teams_staff
+            FOREIGN KEY (staff_id) REFERENCES technic_roster(staff_id)
+            ON DELETE SET NULL;
+        """)
+    except Exception as e:
+        print("[init_db] Note: Foreign key might already exist.", e)
 
 
 if __name__ == "__main__":

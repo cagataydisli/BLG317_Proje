@@ -1,34 +1,224 @@
-<!DOCTYPE html>
-<html lang="en"> <head>
-    <meta charset="UTF-8">
-    <title>Teams</title> <style>
-        table { width: 80%; border-collapse: collapse; margin: 20px auto; }
-        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-        th { background-color: #f4f4f4; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        h1 { text-align: center; }
-    </style>
-</head>
-<body>
-    <h1>Teams List</h1> <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Team Name</th>
-                <th>City</th>
-                <th>Founded Year</th> </tr>
-        </thead>
-        <tbody>
-            {% for team in teams %}
-            <tr>
-                <td>{{ team.team_id }}</td>
-                <td>{{ team.team_name }}</td>
-                <td>{{ team.team_city }}</td>
-                <td>{{ team.team_year }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+{% extends "base.html" %}
 
-</body>
-</html>
+{% block title %}Takım Listesi{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Üst Başlık ve Butonlar -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h2>Takım Listesi</h2>
+            <a href="/" class="btn btn-sm btn-outline-secondary">← Ana Sayfa</a>
+        </div>
+
+        <div>
+            <!-- Düzenleme Modunu Aç/Kapat Butonu -->
+            <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
+                ✏️ Düzenle
+            </button>
+
+            <!-- Yeni Takım Ekle Butonu (Başlangıçta Gizli) -->
+            <button id="addTeamBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addTeamModal">
+                + Yeni Takım
+            </button>
+        </div>
+    </div>
+
+    <!-- Takım Tablosu -->
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Staff ID</th>
+                    <th>Lig</th>
+                    <th>Takım Adı</th>
+                    <th>Şehir</th>
+                    <th>Kuruluş</th>
+                    <th>Salon & Kapasite</th>
+                    <!-- Silme sütunu başlangıçta gizli (d-none) -->
+                    <th class="delete-col d-none" style="width: 100px;">İşlem</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for team in teams %}
+                <tr id="row-{{ team.team_id }}">
+                    <!-- Takım ID -->
+                    <td><strong>{{ team.team_id }}</strong></td>
+                    
+                    <!-- Staff ID -->
+                    <td>
+                        {% if team.staff_id %}
+                            <span class="badge bg-secondary">{{ team.staff_id }}</span>
+                        {% else %}
+                            <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Lig -->
+                    <td><span class="badge bg-info text-dark">{{ team.league or '-' }}</span></td>
+                    
+                    <!-- İsim ve Link -->
+                    <td>
+                        {% if team.team_url %}
+                            <a href="{{ team.team_url }}" target="_blank" class="fw-bold text-decoration-none">
+                                {{ team.team_name }} 🔗
+                            </a>
+                        {% else %}
+                            {{ team.team_name }}
+                        {% endif %}
+                    </td>
+                    
+                    <!-- Şehir ve Yıl -->
+                    <td>{{ team.team_city or '-' }}</td>
+                    <td>{{ team.team_year or '-' }}</td>
+                    
+                    <!-- Salon Bilgileri -->
+                    <td>
+                        <div class="fw-bold">{{ team.saloon_name or '-' }}</div>
+                        <small class="text-muted">
+                            {% if team.saloon_capacity %}
+                                👥 {{ "{:,}".format(team.saloon_capacity) }}
+                            {% else %}
+                                Kapasite Belirsiz
+                            {% endif %}
+                        </small>
+                    </td>
+
+                    <!-- Silme Butonu (Başlangıçta gizli) -->
+                    <td class="delete-col d-none">
+                        <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ team.team_id }})">
+                            🗑️ Sil
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="8" class="text-center py-4">
+                        <p class="text-muted mb-0">Henüz kayıtlı bir takım bulunmamaktadır.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Yeni Takım Ekleme Modalı -->
+<div class="modal fade" id="addTeamModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">Yeni Takım Ekle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form action="/teams/add" method="POST">
+            
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label class="form-label fw-bold">Takım ID (Zorunlu):</label>
+                    <input type="number" name="team_id" class="form-control" placeholder="Örn: 2025" required>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label fw-bold">Takım Adı (Zorunlu):</label>
+                    <input type="text" name="team_name" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Lig:</label>
+                    <input type="text" name="league" class="form-control" placeholder="bsl-2024-2025">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Şehir:</label>
+                    <input type="text" name="team_city" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Kuruluş Yılı:</label>
+                    <input type="number" name="team_year" class="form-control" placeholder="1900">
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <label class="form-label">Logo/Web URL:</label>
+                    <input type="text" name="team_url" class="form-control" placeholder="https://...">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Teknik Kadro ID:</label>
+                    <input type="number" name="staff_id" class="form-control">
+                </div>
+            </div>
+
+            <hr>
+            <h6 class="text-success">Salon Bilgileri</h6>
+
+            <div class="row mb-3">
+                <div class="col-md-8">
+                    <label class="form-label">Salon Adı:</label>
+                    <input type="text" name="saloon_name" class="form-control">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Kapasite:</label>
+                    <input type="number" name="saloon_capacity" class="form-control" placeholder="Sayı giriniz">
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Salon Adresi:</label>
+                <textarea name="saloon_address" class="form-control" rows="2"></textarea>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-success">✅ Takımı Kaydet</button>
+            </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    // Düzenleme Modunu Aç/Kapat
+    function toggleEditMode() {
+        const deleteCols = document.querySelectorAll('.delete-col');
+        const addBtn = document.getElementById('addTeamBtn');
+        const editBtn = document.getElementById('toggleEditMode');
+
+        // Gizli olanları göster, gösterilenleri gizle (toggle)
+        deleteCols.forEach(col => col.classList.toggle('d-none'));
+        addBtn.classList.toggle('d-none');
+
+        // Buton metnini değiştir
+        if (addBtn.classList.contains('d-none')) {
+            editBtn.innerHTML = "✏️ Düzenle";
+            editBtn.classList.replace("btn-secondary", "btn-outline-primary");
+        } else {
+            editBtn.innerHTML = "❌ Modu Kapat";
+            editBtn.classList.replace("btn-outline-primary", "btn-secondary");
+        }
+    }
+
+    // Takım Silme Fonksiyonu
+    function deleteTeam(id) {
+        if(!confirm("Bu takımı silmek istediğine emin misin?")) return;
+        
+        // POST isteği atıyoruz: /teams/delete/<id>
+        fetch('/teams/delete/' + id, { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Başarılıysa satırı tablodan animasyonla sil
+                const row = document.getElementById('row-' + id);
+                row.style.backgroundColor = "#ffcccc";
+                setTimeout(() => row.remove(), 500);
+            } else {
+                alert("Hata: " + (data.error || "Bilinmeyen hata"));
+            }
+        })
+        .catch(err => alert("Bağlantı Hatası: " + err));
+    }
+</script>
+{% endblock %}

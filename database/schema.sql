@@ -8,11 +8,18 @@ DROP TABLE IF EXISTS Teams CASCADE;
 -- =========================
 -- 1) Teams Table (Referans Tablosu)
 -- =========================
+
 CREATE TABLE Teams (
     team_id INT PRIMARY KEY,
-    team_name VARCHAR(100) NOT NULL,
-    city VARCHAR(100),
-    UNIQUE (team_name)
+    staff_id INT,               -- İlişki sütunu (CSV'de yok)
+    team_url VARCHAR(255),      -- Yeni
+    team_name VARCHAR(100),
+    league VARCHAR(64),         -- Yeni
+    team_city VARCHAR(64),
+    team_year INT,
+    saloon_name VARCHAR(128),
+    saloon_capacity INT,        -- ARTIK INT (Sayı)
+    saloon_address TEXT         -- Yeni
 );
 
 -- =========================
@@ -46,3 +53,7 @@ CREATE TABLE technic_roster (
     technic_member_name VARCHAR(100) NOT NULL,
     technic_member_role VARCHAR(100)
 );
+ALTER TABLE Teams 
+ADD CONSTRAINT fk_teams_staff 
+FOREIGN KEY (staff_id) REFERENCES technic_roster(staff_id)
+ON DELETE SET NULL;
