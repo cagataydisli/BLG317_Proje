@@ -327,10 +327,27 @@ def staff_page():
     return render_template('staff.html', staff=staff)
 
 
-# 5. Puan Durumu (Emir Şahin)
 @app.route('/standings')
 def standings_page():
-    # Güvenli sıralama sütunları
+    # ---------------------------------------------------------
+    # ADIM 1: Filtreleme Menüsü için Benzersiz Ligleri Çek
+    # ---------------------------------------------------------
+    league_sql = "SELECT DISTINCT league FROM standings ORDER BY league DESC"
+    try:
+        league_rows = db_api.query(league_sql)
+        # Template'de {{ l.league }} olarak kullanabilmek için dict listesine çeviriyoruz
+        leagues = [{"league": row[0]} for row in league_rows]
+    except Exception as e:
+        print(f"Lig listesi hatası: {e}")
+        leagues = []
+
+    # ---------------------------------------------------------
+    # ADIM 2: URL'den Parametreleri Al
+    # ---------------------------------------------------------
+    # Filtreleme parametresi
+    selected_league = request.args.get('league')
+
+    # Sıralama parametreleri
     allowed_cols = {
         "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
         "team_points_scored","team_points_conceded","team_home_points",
@@ -344,7 +361,7 @@ def standings_page():
     order = request.args.get('order', 'asc').lower()
     order_sql = 'ASC' if order == 'asc' else 'DESC'
 
-    # Optional limit
+    # Limit parametresi
     try:
         limit = int(request.args.get('limit', 0))
         if limit <= 0 or limit > 1000:
@@ -352,6 +369,9 @@ def standings_page():
     except ValueError:
         limit = None
 
+    # ---------------------------------------------------------
+    # ADIM 3: Ana Sorguyu İnşa Et
+    # ---------------------------------------------------------
     cols = [
         "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
         "team_points_scored","team_points_conceded","team_home_points",
@@ -359,13 +379,41 @@ def standings_page():
     ]
     select_cols = ", ".join(cols)
     
-    sql = f"SELECT {select_cols} FROM standings ORDER BY {sort} {order_sql}"
+    sql = """
+        SELECT 
+            s.*, 
+            t.team_url
+        FROM standings s
+        LEFT JOIN Teams t 
+            ON s.league = t.league 
+            AND s.team_name = t.team_name
+    """
     
+    params = []
+
+    # WHERE koşulu (s.league olarak güncelledik çünkü artık iki tablo var)
+    if selected_league:
+        sql += " WHERE s.league = %s"
+        params.append(selected_league)
+    
+    # Sıralama (s. ekledik ki karışıklık olmasın)
+    # Not: sort değişkeni 'team_rank' gibi geldiği için başına 's.' eklemeliyiz
+    sql += f" ORDER BY s.{sort} {order_sql}"
+
+    # Limit
     if limit:
         sql += " LIMIT %s"
-        rows = db_api.query(sql, (limit,))
-    else:
-        rows = db_api.query(sql)
+        params.append(limit)
+
+    rows = db_api.query(sql, tuple(params))
+
+    # Sütun isimlerini manuel tanımlamıştık, şimdi sonuna 'team_url' ekliyoruz
+    cols = [
+        "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
+        "team_points_scored","team_points_conceded","team_home_points",
+        "team_home_goal_difference","team_total_goal_difference","team_total_points",
+        "team_url"  # <-- YENİ EKLENEN
+    ]
 
     # Tuple listesini Dict listesine çeviriyoruz
     standings = [dict(zip(cols, row)) for row in rows]
@@ -373,7 +421,13 @@ def standings_page():
     if request.args.get('format') == 'json':
         return jsonify(standings)
         
-    return render_template('standings.html', standings=standings)
+    # HTML'e hem tablo verisini, hem lig listesini, hem de seçili ligi gönderiyoruz
+    return render_template(
+        'standings.html', 
+        standings=standings, 
+        leagues=leagues, 
+        current_league=selected_league
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)

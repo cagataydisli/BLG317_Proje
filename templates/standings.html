@@ -1,31 +1,78 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Title</title>
-</head>
-<body>
-<table>
-  <thead>
-    <tr>
-      <th>League</th><th>Rank</th><th>Team</th><th>Points</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for row in standings %}
-    <tr>
-      <td>{{ row.league }}</td>
-      <td>{{ row.team_rank }}</td>
-      <td>{{ row.team_name }}</td>
-      <td>{{ row.team_matches_played }}</td>
-      <td>{{ row.team_wins }}</td>
-      <td>{{ row.team_losses }}</td>
-      <td>{{ row.team_total_points }}</td>
-      <td>{{ row.team_points_scored }}</td>
-      <td>{{ row.team_points_conceded }}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Standings{% endblock %}
+
+{% block content %}
+<style>
+    .hover-primary:hover {
+        color: #0d6efd !important; /* Bootstrap primary color */
+        text-decoration: underline !important;
+    }
+</style>
+
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+    <h4 class="mb-0">Standings</h4>
+  </div>
+
+  <div class="card-body">
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <form action="" method="GET">
+          <label for="league-select" class="form-label fw-bold">Select League:</label>
+          <select name="league" id="league-select" class="form-select" onchange="this.form.submit()">
+            <option value="">All Leagues</option>
+            {% for l in leagues %}
+            <option value="{{ l.league }}" {% if current_league==l.league %}selected{% endif %}>
+              {{ l.league }}
+            </option>
+            {% endfor %}
+          </select>
+        </form>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-striped table-hover table-bordered text-center align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>League</th>
+            <th>Rank</th>
+            <th class="text-start">Team</th>
+            <th title="Matches Played">MP</th>
+            <th title="Wins">W</th>
+            <th title="Losses">L</th>
+            <th title="Points Scored">PS</th>
+            <th title="Points Conceded">PC</th>
+            <th title="Total Points">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in standings %}
+          <tr>
+            <td><span class="badge bg-secondary">{{ row.league }}</span></td>
+            <td>{{ row.team_rank }}</td>
+
+            <td class="text-start fw-bold">
+              {% if row.team_url %}
+              <a href="{{ row.team_url }}" target="_blank" class="text-decoration-none text-dark hover-primary">
+                {{ row.team_name }}
+              </a>
+              {% else %}
+              {{ row.team_name }}
+              {% endif %}
+            </td>
+            <td>{{ row.team_matches_played }}</td>
+            <td>{{ row.team_wins }}</td>
+            <td>{{ row.team_losses }}</td>
+            <td>{{ row.team_points_scored }}</td>
+            <td>{{ row.team_points_conceded }}</td>
+            <td class="fw-bold text-primary">{{ row.team_total_points }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
