@@ -428,6 +428,55 @@ def standings_page():
         leagues=leagues, 
         current_league=selected_league
     )
+@app.route('/teams/<int:team_id>/players')
+def team_players_page(team_id):
+    # 1. Önce Takım Adını ve Bilgilerini Çekelim (Başlık için)
+    team_query = "SELECT team_name, league, team_url FROM Teams WHERE team_id = %s"
+    try:
+        team_row = db_api.query(team_query, (team_id,))
+        if not team_row:
+            return "Takım bulunamadı!", 404
+        
+        # Tuple'dan veriyi alalım
+        team_info = {
+            "name": team_row[0][0],
+            "league": team_row[0][1],
+            "url": team_row[0][2]
+        }
+    except Exception as e:
+        return f"Takım bilgisi hatası: {e}"
+
+    # 2. O Takıma Ait Oyuncuları Çekelim
+    players_query = """
+        SELECT 
+            player_id, 
+            player_name, 
+            player_height, 
+            player_birthdate, 
+            league
+        FROM Players 
+        WHERE team_id = %s
+        ORDER BY player_name ASC
+    """
+    
+    try:
+        player_rows = db_api.query(players_query, (team_id,))
+    except Exception as e:
+        print(f"Oyuncu sorgu hatası: {e}")
+        player_rows = []
+
+    players = []
+    for row in player_rows:
+        players.append({
+            "player_id": row[0],
+            "player_name": row[1],
+            "player_height": row[2],
+            "player_birthdate": row[3],
+            "league": row[4]
+        })
+
+    # Verileri yeni bir HTML sayfasına gönderiyoruz
+    return render_template('team_players.html', team=team_info, players=players)
 
 if __name__ == '__main__':
     app.run(debug=True)

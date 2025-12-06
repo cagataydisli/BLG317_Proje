@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ team.name }} - Oyuncular{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Başlık Alanı -->
+    <div class="card bg-light mb-4 shadow-sm">
+        <div class="card-body d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="mb-0 text-primary">{{ team.name }}</h2>
+                <span class="badge bg-secondary">{{ team.league }}</span>
+            </div>
+            <div>
+                {% if team.url %}
+                    <a href="{{ team.url }}" target="_blank" class="btn btn-outline-info me-2">🌐 Resmi Site</a>
+                {% endif %}
+                <a href="/teams/table" class="btn btn-secondary">🔙 Takımlara Dön</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Oyuncu Tablosu -->
+    <h4 class="mb-3">Oyuncu Kadrosu</h4>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>ID</th>
+                    <th>Oyuncu Adı</th>
+                    <th>Boy</th>
+                    <th>Doğum Tarihi</th>
+                    <th>Lig</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for player in players %}
+                <tr>
+                    <td>{{ player.player_id }}</td>
+                    <td class="fw-bold">{{ player.player_name }}</td>
+                    <td>{{ player.player_height or '-' }}</td>
+                    <td>{{ player.player_birthdate or '-' }}</td>
+                    <td>{{ player.league or '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center py-5 text-muted">
+                        <h5>Bu takıma ait kayıtlı oyuncu bulunamadı.</h5>
+                        <p>Henüz veri girişi yapılmamış olabilir.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

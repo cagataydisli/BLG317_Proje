@@ -4,7 +4,6 @@
 
 {% block content %}
 <div class="container mt-4">
-    <!-- Üst Başlık ve Butonlar -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h2>Takım Listesi</h2>
@@ -12,19 +11,15 @@
         </div>
 
         <div>
-            <!-- Düzenleme Modunu Aç/Kapat Butonu -->
             <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
                 ✏️ Düzenle
             </button>
-
-            <!-- Yeni Takım Ekle Butonu (Başlangıçta Gizli) -->
             <button id="addTeamBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addTeamModal">
                 + Yeni Takım
             </button>
         </div>
     </div>
 
-    <!-- Takım Tablosu -->
     <div class="table-responsive">
         <table class="table table-striped table-hover align-middle">
             <thead class="table-dark">
@@ -36,7 +31,6 @@
                     <th>Şehir</th>
                     <th>Kuruluş</th>
                     <th>Salon & Kapasite</th>
-                    <!-- Silme sütunu başlangıçta gizli (d-none) -->
                     <th class="delete-col d-none" style="width: 100px;">İşlem</th>
                 </tr>
             </thead>
@@ -58,14 +52,22 @@
                     <!-- Lig -->
                     <td><span class="badge bg-info text-dark">{{ team.league or '-' }}</span></td>
                     
-                    <!-- İsim ve Link -->
+                    <!-- İsim ve Link Sütunu (GÜNCELLENEN KISIM) -->
                     <td>
-                        {% if team.team_url %}
-                            <a href="{{ team.team_url }}" target="_blank" class="fw-bold text-decoration-none">
-                                {{ team.team_name }} 🔗
-                            </a>
-                        {% else %}
+                        <!-- İsim -> Oyuncu Sayfasına -->
+                        <a href="/teams/{{ team.team_id }}/players" class="fw-bold text-decoration-none text-dark">
                             {{ team.team_name }}
+                        </a>
+
+                        <!-- İkon -> Resmi Siteye -->
+                        {% if team.team_url %}
+                            <a href="{{ team.team_url }}" target="_blank" class="text-primary ms-1" title="Resmi Siteye Git">
+                                🔗
+                            </a>
+                        {% endif %}
+                        
+                        {% if team.staff_id %}
+                            <div class="text-muted" style="font-size: 0.75rem;">Staff ID: {{ team.staff_id }}</div>
                         {% endif %}
                     </td>
                     
@@ -85,7 +87,7 @@
                         </small>
                     </td>
 
-                    <!-- Silme Butonu (Başlangıçta gizli) -->
+                    <!-- Silme Butonu -->
                     <td class="delete-col d-none">
                         <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ team.team_id }})">
                             🗑️ Sil
@@ -114,7 +116,6 @@
       </div>
       <div class="modal-body">
         <form action="/teams/add" method="POST">
-            
             <div class="row mb-3">
                 <div class="col-md-4">
                     <label class="form-label fw-bold">Takım ID (Zorunlu):</label>
@@ -125,7 +126,6 @@
                     <input type="text" name="team_name" class="form-control" required>
                 </div>
             </div>
-
             <div class="row mb-3">
                 <div class="col-md-4">
                     <label class="form-label">Lig:</label>
@@ -140,7 +140,6 @@
                     <input type="number" name="team_year" class="form-control" placeholder="1900">
                 </div>
             </div>
-
             <div class="row mb-3">
                 <div class="col-md-8">
                     <label class="form-label">Logo/Web URL:</label>
@@ -151,10 +150,8 @@
                     <input type="number" name="staff_id" class="form-control">
                 </div>
             </div>
-
             <hr>
             <h6 class="text-success">Salon Bilgileri</h6>
-
             <div class="row mb-3">
                 <div class="col-md-8">
                     <label class="form-label">Salon Adı:</label>
@@ -165,12 +162,10 @@
                     <input type="number" name="saloon_capacity" class="form-control" placeholder="Sayı giriniz">
                 </div>
             </div>
-            
             <div class="mb-3">
                 <label class="form-label">Salon Adresi:</label>
                 <textarea name="saloon_address" class="form-control" rows="2"></textarea>
             </div>
-
             <div class="d-grid">
                 <button type="submit" class="btn btn-success">✅ Takımı Kaydet</button>
             </div>
@@ -181,17 +176,14 @@
 </div>
 
 <script>
-    // Düzenleme Modunu Aç/Kapat
     function toggleEditMode() {
         const deleteCols = document.querySelectorAll('.delete-col');
         const addBtn = document.getElementById('addTeamBtn');
         const editBtn = document.getElementById('toggleEditMode');
 
-        // Gizli olanları göster, gösterilenleri gizle (toggle)
         deleteCols.forEach(col => col.classList.toggle('d-none'));
         addBtn.classList.toggle('d-none');
 
-        // Buton metnini değiştir
         if (addBtn.classList.contains('d-none')) {
             editBtn.innerHTML = "✏️ Düzenle";
             editBtn.classList.replace("btn-secondary", "btn-outline-primary");
@@ -201,16 +193,13 @@
         }
     }
 
-    // Takım Silme Fonksiyonu
     function deleteTeam(id) {
         if(!confirm("Bu takımı silmek istediğine emin misin?")) return;
         
-        // POST isteği atıyoruz: /teams/delete/<id>
         fetch('/teams/delete/' + id, { method: 'POST' })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                // Başarılıysa satırı tablodan animasyonla sil
                 const row = document.getElementById('row-' + id);
                 row.style.backgroundColor = "#ffcccc";
                 setTimeout(() => row.remove(), 500);
