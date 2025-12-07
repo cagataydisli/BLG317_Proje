@@ -4,47 +4,145 @@
 
 {% block content %}
 <style>
-    .hover-primary:hover {
-        color: #0d6efd !important; /* Bootstrap primary color */
-        text-decoration: underline !important;
-    }
+  .hover-primary:hover {
+    color: #0d6efd !important;
+    text-decoration: underline !important;
+  }
+
+  .filter-card {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #0d6efd;
+  }
+
+  /* Tablo başlıkları için stil */
+  .sort-link {
+    color: white;
+    text-decoration: none;
+    display: block;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .sort-link:hover {
+    color: #ddd;
+  }
 </style>
+
+{% macro sort_header(col_db_name, label, tooltip='') %}
+    {% set current_sort = request.args.get('sort') %}
+    {% set current_order = request.args.get('order') %}
+
+    {% set new_order = 'desc' %} 
+    {% set icon = '' %} 
+    {% set target_sort = col_db_name %}
+
+    {% if current_sort == col_db_name %}
+        {% if current_order == 'desc' %}
+            {% set new_order = 'asc' %}
+            {% set icon = '▼' %} 
+        {% elif current_order == 'asc' %}
+            {% set target_sort = None %}
+            {% set new_order = None %}
+            {% set icon = '▲' %} 
+        {% endif %}
+    {% endif %}
+
+    <th title="{{ tooltip }}">
+        <a href="{{ url_for('standings_page', **dict(request.args, sort=target_sort, order=new_order)) }}" class="sort-link">
+            {{ label }} <span class="small">{{ icon }}</span>
+        </a>
+    </th>
+{% endmacro %}
 
 <div class="card shadow-sm mb-4">
   <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
     <h4 class="mb-0">Standings</h4>
+    <div>
+      <button class="btn btn-outline-light btn-sm me-2" type="button" data-bs-toggle="collapse"
+        data-bs-target="#filterPanel">
+        🔍 Advanced Filters
+      </button>
+      <button type="button" class="btn btn-light btn-sm fw-bold" data-bs-toggle="modal"
+        data-bs-target="#addStandingModal">
+        + Add New
+      </button>
+    </div>
+  </div>
+
+  <div class="collapse {% if filters|length > 0 %}show{% endif %}" id="filterPanel">
+    <div class="card-body filter-card">
+      <form action="" method="GET">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label fw-bold small">League</label>
+            <select name="league" class="form-select form-select-sm">
+              <option value="">All Leagues</option>
+              {% for l in leagues %}
+              <option value="{{ l.league }}" {% if filters.league==l.league %}selected{% endif %}>
+                {{ l.league }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold small">Team Name</label>
+            <input type="text" name="team_name" class="form-control form-control-sm" placeholder="Ex: Efes"
+              value="{{ filters.team_name or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold small">Rank(s)</label>
+            <input type="text" name="team_rank" class="form-control form-control-sm" placeholder="Ex: 1,2,3"
+              value="{{ filters.team_rank or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold small">Total Points</label>
+            <input type="text" name="team_total_points" class="form-control form-control-sm" placeholder="Ex: >40"
+              value="{{ filters.team_total_points or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold small">Wins</label>
+            <input type="text" name="team_wins" class="form-control form-control-sm" placeholder="Ex: >=10"
+              value="{{ filters.team_wins or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold small">Losses</label>
+            <input type="text" name="team_losses" class="form-control form-control-sm" placeholder="Ex: <5"
+              value="{{ filters.team_losses or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold small">Points Scored</label>
+            <input type="text" name="team_points_scored" class="form-control form-control-sm" placeholder="Ex: >1500"
+              value="{{ filters.team_points_scored or '' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label fw-bold small">Points Conceded</label>
+            <input type="text" name="team_points_conceded" class="form-control form-control-sm" placeholder="Ex: <1400"
+              value="{{ filters.team_points_conceded or '' }}">
+          </div>
+          <div class="col-12 text-end mt-2">
+            <a href="{{ url_for('standings_page') }}" class="btn btn-secondary btn-sm">Reset</a>
+            <button type="submit" class="btn btn-primary btn-sm px-4">Apply Filters</button>
+          </div>
+        </div>
+      </form>
+    </div>
   </div>
 
   <div class="card-body">
-    <div class="row mb-3">
-      <div class="col-md-4">
-        <form action="" method="GET">
-          <label for="league-select" class="form-label fw-bold">Select League:</label>
-          <select name="league" id="league-select" class="form-select" onchange="this.form.submit()">
-            <option value="">All Leagues</option>
-            {% for l in leagues %}
-            <option value="{{ l.league }}" {% if current_league==l.league %}selected{% endif %}>
-              {{ l.league }}
-            </option>
-            {% endfor %}
-          </select>
-        </form>
-      </div>
-    </div>
-
     <div class="table-responsive">
       <table class="table table-striped table-hover table-bordered text-center align-middle">
         <thead class="table-dark">
           <tr>
-            <th>League</th>
-            <th>Rank</th>
-            <th class="text-start">Team</th>
-            <th title="Matches Played">MP</th>
-            <th title="Wins">W</th>
-            <th title="Losses">L</th>
-            <th title="Points Scored">PS</th>
-            <th title="Points Conceded">PC</th>
-            <th title="Total Points">Pts</th>
+            {{ sort_header('league', 'League') }}
+            {{ sort_header('team_rank', 'Rank') }}
+            {{ sort_header('team_name', 'Team') }}
+            {{ sort_header('team_matches_played', 'MP', 'Matches Played') }}
+            {{ sort_header('team_wins', 'W', 'Wins') }}
+            {{ sort_header('team_losses', 'L', 'Losses') }}
+            {{ sort_header('team_points_scored', 'PS', 'Points Scored') }}
+            {{ sort_header('team_points_conceded', 'PC', 'Points Conceded') }}
+            {{ sort_header('team_total_points', 'Pts', 'Total Points') }}
+            <th width="100">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -52,7 +150,6 @@
           <tr>
             <td><span class="badge bg-secondary">{{ row.league }}</span></td>
             <td>{{ row.team_rank }}</td>
-
             <td class="text-start fw-bold">
               {% if row.team_url %}
               <a href="{{ row.team_url }}" target="_blank" class="text-decoration-none text-dark hover-primary">
@@ -68,6 +165,27 @@
             <td>{{ row.team_points_scored }}</td>
             <td>{{ row.team_points_conceded }}</td>
             <td class="fw-bold text-primary">{{ row.team_total_points }}</td>
+
+            <td>
+              <button type="button" class="btn btn-sm btn-warning text-white" data-bs-toggle="modal"
+                data-bs-target="#editStandingModal" data-league="{{ row.league }}" data-team="{{ row.team_name }}"
+                data-rank="{{ row.team_rank }}" data-mp="{{ row.team_matches_played }}" data-wins="{{ row.team_wins }}"
+                data-losses="{{ row.team_losses }}" data-ps="{{ row.team_points_scored }}"
+                data-pc="{{ row.team_points_conceded }}" data-pts="{{ row.team_total_points }}"
+                onclick="fillEditModal(this)">
+                ✏️
+              </button>
+
+              <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal"
+                data-bs-target="#deleteStandingModal" data-league="{{ row.league }}" data-team="{{ row.team_name }}"
+                onclick="fillDeleteModal(this)">
+                🗑️
+              </button>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="10" class="text-center text-muted">No data found.</td>
           </tr>
           {% endfor %}
         </tbody>
@@ -75,4 +193,192 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade" id="addStandingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-success text-white">
+        <h5 class="modal-title">Add New Team Standing</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('add_standing') }}" method="POST">
+        <div class="modal-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">League Name</label>
+                    <input class="form-control" list="leagueOptions" name="league" placeholder="Type or select league..." required>
+                    <datalist id="leagueOptions">
+                        {% for l in leagues %}
+                            <option value="{{ l.league }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Team Name</label>
+                    <input type="text" class="form-control" name="team_name" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Rank</label>
+                    <input type="number" class="form-control" name="team_rank" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold text-primary">Total Points</label>
+                    <input type="number" class="form-control border-primary" name="team_total_points" required>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">MP</label>
+                    <input type="number" class="form-control" name="team_matches_played" value="0">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Wins</label>
+                    <input type="number" class="form-control" name="team_wins" value="0">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Losses</label>
+                    <input type="number" class="form-control" name="team_losses" value="0">
+                </div>
+                <div class="col-md-3"></div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Points Scored</label>
+                    <input type="number" class="form-control" name="team_points_scored" value="0">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Points Conceded</label>
+                    <input type="number" class="form-control" name="team_points_conceded" value="0">
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            <button type="submit" class="btn btn-success">Save Team</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editStandingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title">Edit Team</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('edit_standing') }}" method="POST">
+        <div class="modal-body">
+          <input type="hidden" name="return_url" value="{{ request.url }}">
+          <input type="hidden" name="original_league" id="edit_orig_league">
+          <input type="hidden" name="original_team_name" id="edit_orig_team">
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">League</label>
+              <input type="text" class="form-control" name="league" id="edit_league" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Team Name</label>
+              <input type="text" class="form-control" name="team_name" id="edit_team_name" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Rank</label>
+              <input type="number" class="form-control" name="team_rank" id="edit_rank" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-bold text-primary">Total Points</label>
+              <input type="number" class="form-control border-primary" name="team_total_points" id="edit_pts" required>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">MP</label>
+              <input type="number" class="form-control" name="team_matches_played" id="edit_mp">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Wins</label>
+              <input type="number" class="form-control" name="team_wins" id="edit_wins">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Losses</label>
+              <input type="number" class="form-control" name="team_losses" id="edit_losses">
+            </div>
+            <div class="col-md-3"></div>
+            <div class="col-md-6">
+              <label class="form-label">Points Scored</label>
+              <input type="number" class="form-control" name="team_points_scored" id="edit_ps">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Points Conceded</label>
+              <input type="number" class="form-control" name="team_points_conceded" id="edit_pc">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-warning">Update Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="deleteStandingModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title">Delete Team</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="{{ url_for('delete_standing') }}" method="POST">
+        <div class="modal-body">
+            <input type="hidden" name="return_url" value="{{ request.url }}">
+            <input type="hidden" name="league" id="del_league">
+            <input type="hidden" name="team_name" id="del_team_name">
+            
+            <p class="fs-5">Are you sure you want to delete <strong id="del_display_name"></strong>?</p>
+            <p class="text-danger small mb-0">This action cannot be undone!</p>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-danger">Yes, Delete</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  function fillDeleteModal(button) {
+    const league = button.getAttribute('data-league');
+    const team = button.getAttribute('data-team');
+    document.getElementById('del_league').value = league;
+    document.getElementById('del_team_name').value = team;
+    document.getElementById('del_display_name').innerText = team;
+  }
+  function fillEditModal(button) {
+    const league = button.getAttribute('data-league');
+    const team = button.getAttribute('data-team');
+    const rank = button.getAttribute('data-rank');
+    const mp = button.getAttribute('data-mp');
+    const wins = button.getAttribute('data-wins');
+    const losses = button.getAttribute('data-losses');
+    const ps = button.getAttribute('data-ps');
+    const pc = button.getAttribute('data-pc');
+    const pts = button.getAttribute('data-pts');
+
+    document.getElementById('edit_league').value = league;
+    document.getElementById('edit_team_name').value = team;
+    document.getElementById('edit_rank').value = rank;
+    document.getElementById('edit_mp').value = mp;
+    document.getElementById('edit_wins').value = wins;
+    document.getElementById('edit_losses').value = losses;
+    document.getElementById('edit_ps').value = ps;
+    document.getElementById('edit_pc').value = pc;
+    document.getElementById('edit_pts').value = pts;
+
+    document.getElementById('edit_orig_league').value = league;
+    document.getElementById('edit_orig_team').value = team;
+  }
+</script>
+
 {% endblock %}
