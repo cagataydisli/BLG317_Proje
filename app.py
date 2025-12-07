@@ -263,6 +263,11 @@ def matches_page():
     except:
         limit = 100
     
+    # Fetch all teams for dropdown menus
+    teams_query = "SELECT team_id, team_name FROM Teams ORDER BY team_name"
+    teams_rows = db_api.query(teams_query)
+    teams = [{'team_id': row[0], 'team_name': row[1]} for row in teams_rows]
+    
     # Maç verilerini çekerken Ev Sahibi ve Deplasman takımlarının isimlerini getirmek için
     # teams tablosuna İKİ KEZ join yapıyoruz (t1: home, t2: away)
     query = f"""
@@ -294,10 +299,146 @@ def matches_page():
     
     matches = [dict(zip(cols, row)) for row in rows]
     
+    # Complex Query: Analytics Statistics
+    analytics_query = """
+        SELECT 
+            m.match_city,
+            COUNT(*) as total_matches,
+            ROUND(AVG(m.home_score + m.away_score), 2) as avg_total_points,
+            MAX(m.home_score + m.away_score) as highest_scoring_game,
+            COUNT(CASE WHEN m.home_score > m.away_score THEN 1 END) as home_wins
+        FROM Matches m
+        WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        GROUP BY m.match_city
+        HAVING COUNT(*) >= 5
+        ORDER BY avg_total_points DESC
+        LIMIT 10
+    """
+    analytics_rows = db_api.query(analytics_query)
+    analytics = [{
+        'city': row[0],
+        'total_matches': row[1],
+        'avg_total_points': row[2],
+        'highest_scoring_game': row[3],
+        'home_wins': row[4]
+    } for row in analytics_rows]
+    
     if fmt == 'json':
         return jsonify(matches)
     
-    return render_template('matches.html', matches=matches)
+    return render_template('matches.html', matches=matches, teams=teams, analytics=analytics)
+
+# --- MATCHES: CREATE (Add Match) ---
+@app.route('/matches/add', methods=['POST'])
+def add_match():
+    try:
+        data = request.form
+        
+        # Extract form data
+        match_id = data.get('match_id')
+        home_team_id = data.get('home_team_id')
+        away_team_id = data.get('away_team_id')
+        match_date = data.get('match_date')
+        match_hour = data.get('match_hour')
+        match_week = data.get('match_week')
+        league = data.get('league')
+        match_city = data.get('match_city')
+        match_saloon = data.get('match_saloon')
+        
+        # Validation: Check if home and away teams are different
+        if home_team_id == away_team_id:
+            flash("Error: Home and away teams cannot be the same!", "danger")
+            return redirect(url_for('matches_page'))
+        
+        # SQL Insert
+        sql = """
+            INSERT INTO Matches (
+                match_id, home_team_id, away_team_id, match_date, match_hour,
+                match_week, league, match_city, match_saloon
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        db_api.execute(sql, (
+            match_id, home_team_id, away_team_id, match_date, match_hour,
+            match_week, league, match_city, match_saloon
+        ))
+        
+        flash(f"Match successfully added! (ID: {match_id})", "success")
+        return redirect(url_for('matches_page'))
+        
+    except Exception as e:
+        print(f"ADD MATCH ERROR: {e}")
+        flash(f"Error adding match: {e}", "danger")
+        return redirect(url_for('matches_page'))
+
+# --- MATCHES: UPDATE (Edit Match/Scores) ---
+@app.route('/matches/update', methods=['POST'])
+def update_match():
+    try:
+        data = request.form
+        
+        # Extract form data
+        match_id = data.get('match_id')
+        home_team_id = data.get('home_team_id')
+        away_team_id = data.get('away_team_id')
+        match_date = data.get('match_date')
+        match_hour = data.get('match_hour')
+        home_score = data.get('home_score')
+        away_score = data.get('away_score')
+        match_week = data.get('match_week')
+        league = data.get('league')
+        match_city = data.get('match_city')
+        match_saloon = data.get('match_saloon')
+        
+        # Validation
+        if home_team_id == away_team_id:
+            flash("Error: Home and away teams cannot be the same!", "danger")
+            return redirect(url_for('matches_page'))
+        
+        # Convert scores to int or None
+        home_score = int(home_score) if home_score and home_score.strip() else None
+        away_score = int(away_score) if away_score and away_score.strip() else None
+        
+        # SQL Update
+        sql = """
+            UPDATE Matches
+            SET home_team_id = %s,
+                away_team_id = %s,
+                match_date = %s,
+                match_hour = %s,
+                home_score = %s,
+                away_score = %s,
+                match_week = %s,
+                league = %s,
+                match_city = %s,
+                match_saloon = %s
+            WHERE match_id = %s
+        """
+        
+        db_api.execute(sql, (
+            home_team_id, away_team_id, match_date, match_hour,
+            home_score, away_score, match_week, league, match_city, match_saloon,
+            match_id
+        ))
+        
+        flash(f"Match updated! (ID: {match_id})", "success")
+        return redirect(url_for('matches_page'))
+        
+    except Exception as e:
+        print(f"UPDATE MATCH ERROR: {e}")
+        flash(f"Error updating match: {e}", "danger")
+        return redirect(url_for('matches_page'))
+
+# --- MATCHES: DELETE ---
+@app.route('/matches/delete/<string:match_id>', methods=['POST'])
+def delete_match(match_id):
+    try:
+        sql = "DELETE FROM Matches WHERE match_id = %s"
+        db_api.execute(sql, (match_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"DELETE MATCH ERROR: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 # 4. Teknik Ekip (Musa Can Turgut)
 @app.route('/staff')
