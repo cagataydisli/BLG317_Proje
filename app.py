@@ -1,6 +1,8 @@
 # app.py
 from flask import request, Flask, render_template, jsonify, redirect, url_for
 import database.db as db_api
+from datetime import datetime # En tepeye bunu ekle
+import math # En tepeye eklemeyi unutma (sayfa sayısını yukarı yuvarlamak için)
 
 app = Flask(__name__)
 
@@ -12,41 +14,127 @@ def index():
 # 1. Oyuncular (Çağatay Dişli)
 @app.route('/players')
 def players_page():
-    # Güncel sorgu: Hem takım linkini hem de lig bilgisini içeriyor
-    query = """
-        SELECT 
-            p.player_id, 
-            p.player_name, 
-            p.player_height, 
-            p.player_birthdate, 
-            p.league, 
-            t.team_name,
-            p.team_url
+    # --- 1. Parametreleri Al ---
+    search = request.args.get('search', '').strip().lower()
+    sort_by = request.args.get('sort_by', '').strip()
+
+    # Sayfalama Parametreleri (Varsayılan: 1. sayfa, 20 satır)
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 20))
+    except ValueError:
+        page = 1
+        per_page = 20
+
+    # Filtre Parametreleri
+    selected_teams = request.args.getlist('teams')
+    selected_leagues = request.args.getlist('leagues')
+
+    # --- 2. Filtre Listelerini Hazırla ---
+    try:
+        all_teams = [r[0] for r in db_api.query("SELECT DISTINCT team_name FROM teams ORDER BY team_name") if r[0]]
+        all_leagues = [r[0] for r in db_api.query("SELECT DISTINCT league FROM players ORDER BY league") if r[0]]
+    except:
+        all_teams, all_leagues = [], []
+
+    # --- 3. SQL ile Veriyi Çek ---
+    sql = """
+        SELECT p.player_id, p.player_name, p.player_height, p.player_birthdate, 
+               p.league, t.team_name, p.team_url
         FROM players p
         LEFT JOIN teams t ON p.team_id = t.team_id
-        ORDER BY t.team_name, p.player_name
-        LIMIT 500
+        WHERE 1=1
     """
+    params = []
+
+    if search:
+        sql += " AND p.player_name ILIKE %s"
+        params.append(f"%{search}%")
+
+    if selected_teams:
+        placeholders = ', '.join(['%s'] * len(selected_teams))
+        sql += f" AND t.team_name IN ({placeholders})"
+        params.extend(selected_teams)
+
+    if selected_leagues:
+        placeholders = ', '.join(['%s'] * len(selected_leagues))
+        sql += f" AND p.league IN ({placeholders})"
+        params.extend(selected_leagues)
+
     try:
-        rows = db_api.query(query)
+        rows = db_api.query(sql, tuple(params))
     except Exception as e:
-        print(f"Hata: {e}")
+        print(f"SQL Hatası: {e}")
         rows = []
 
-    # Veriyi Tuple'dan Dictionary'e çeviriyoruz (HTML'de isimle erişmek için)
+    # --- 4. Veriyi Python Listesine Çevir ---
     players = []
+    today = datetime.now()
+
     for row in rows:
+        p_id, p_name, p_height, p_birth, p_league, t_name, t_url = row
+
+        age = 0
+        birth_date_obj = datetime.min
+        if p_birth and isinstance(p_birth, str) and len(p_birth.strip()) >= 8:
+            try:
+                clean_date = p_birth.strip()
+                birth_date_obj = datetime.strptime(clean_date, "%d.%m.%Y")
+                age = today.year - birth_date_obj.year - (
+                            (today.month, today.day) < (birth_date_obj.month, birth_date_obj.day))
+            except:
+                age = 0
+
         players.append({
-            "player_id": row[0],
-            "player_name": row[1],
-            "player_height": row[2],
-            "player_birthdate": row[3],
-            "league": row[4],
-            "team_name": row[5],
-            "team_url": row[6]
+            "player_id": p_id,
+            "player_name": p_name,
+            "player_height": p_height,
+            "player_birthdate": p_birth,
+            "age": age if age > 0 else "-",
+            "league": p_league,
+            "team_name": t_name,
+            "team_url": t_url,
+            "sort_date": birth_date_obj,
+            "sort_height": int(''.join(filter(str.isdigit, p_height))) if p_height and any(
+                c.isdigit() for c in p_height) else 0
         })
 
-    return render_template('players_table.html', players=players)
+    # --- 5. SIRALAMA ---
+    if sort_by == 'name_asc':
+        players.sort(key=lambda x: x['player_name'].lower())
+    elif sort_by == 'age_asc':
+        players.sort(key=lambda x: x['sort_date'], reverse=True)
+    elif sort_by == 'age_desc':
+        players.sort(key=lambda x: x['sort_date'])
+    elif sort_by == 'height_desc':
+        players.sort(key=lambda x: x['sort_height'], reverse=True)
+    else:
+        players.sort(key=lambda x: (x['team_name'] or "", x['player_name']))
+
+    # --- 6. SAYFALAMA MANTIĞI (PAGINATION) ---
+    total_count = len(players)
+    total_pages = math.ceil(total_count / per_page)
+
+    # Sayfa sınırlarını kontrol et
+    if page < 1: page = 1
+    if page > total_pages and total_pages > 0: page = total_pages
+
+    # Listeyi Dilimle (Slice)
+    start_index = (page - 1) * per_page
+    end_index = start_index + per_page
+    paginated_players = players[start_index:end_index]
+
+    return render_template('players_table.html',
+                           players=paginated_players,
+                           all_teams=all_teams,
+                           all_leagues=all_leagues,
+                           selected_teams=selected_teams,
+                           selected_leagues=selected_leagues,
+                           # Sayfalama verilerini gönderiyoruz
+                           current_page=page,
+                           total_pages=total_pages,
+                           per_page=per_page,
+                           total_count=total_count)
 
 
 # --- YENİ OYUNCU EKLEME ---
@@ -105,7 +193,7 @@ def players_table_page():
         FROM players p
         LEFT JOIN teams t ON p.team_id = t.team_id
         ORDER BY t.team_name, p.player_name
-        LIMIT 500 -- Sayfa çok yavaşlamasın diye limit koyabilirsin
+        -- Sayfa çok yavaşlamasın diye limit koyabilirsin
     """
     rows = db_api.query(query)
     
@@ -123,6 +211,7 @@ def players_table_page():
 
     return render_template('players_table.html', players=players)   
 
+#######################################################################################################################
 
 # --- 1. ANA MENÜ (Yönlendirme) ---
 @app.route('/teams')
