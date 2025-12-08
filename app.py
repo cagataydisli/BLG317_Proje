@@ -1,11 +1,12 @@
 # app.py
 from flask import request, Flask, render_template, jsonify, redirect, url_for
+from flask import flash
 import database.db as db_api
 from datetime import datetime # En tepeye bunu ekle
 import math # En tepeye eklemeyi unutma (sayfa sayısını yukarı yuvarlamak için)
 
 app = Flask(__name__)
-
+app.secret_key = "345678987654345678"
 # Ana Sayfa Route'u
 @app.route('/')
 def index():
@@ -351,6 +352,11 @@ def matches_page():
     except:
         limit = 100
     
+    # Fetch all teams for dropdown menus
+    teams_query = "SELECT team_id, team_name FROM Teams ORDER BY team_name"
+    teams_rows = db_api.query(teams_query)
+    teams = [{'team_id': row[0], 'team_name': row[1]} for row in teams_rows]
+    
     # Maç verilerini çekerken Ev Sahibi ve Deplasman takımlarının isimlerini getirmek için
     # teams tablosuna İKİ KEZ join yapıyoruz (t1: home, t2: away)
     query = f"""
@@ -382,10 +388,146 @@ def matches_page():
     
     matches = [dict(zip(cols, row)) for row in rows]
     
+    # Complex Query: Analytics Statistics
+    analytics_query = """
+        SELECT 
+            m.match_city,
+            COUNT(*) as total_matches,
+            ROUND(AVG(m.home_score + m.away_score), 2) as avg_total_points,
+            MAX(m.home_score + m.away_score) as highest_scoring_game,
+            COUNT(CASE WHEN m.home_score > m.away_score THEN 1 END) as home_wins
+        FROM Matches m
+        WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        GROUP BY m.match_city
+        HAVING COUNT(*) >= 5
+        ORDER BY avg_total_points DESC
+        LIMIT 10
+    """
+    analytics_rows = db_api.query(analytics_query)
+    analytics = [{
+        'city': row[0],
+        'total_matches': row[1],
+        'avg_total_points': row[2],
+        'highest_scoring_game': row[3],
+        'home_wins': row[4]
+    } for row in analytics_rows]
+    
     if fmt == 'json':
         return jsonify(matches)
     
-    return render_template('matches.html', matches=matches)
+    return render_template('matches.html', matches=matches, teams=teams, analytics=analytics)
+
+# --- MATCHES: CREATE (Add Match) ---
+@app.route('/matches/add', methods=['POST'])
+def add_match():
+    try:
+        data = request.form
+        
+        # Extract form data
+        match_id = data.get('match_id')
+        home_team_id = data.get('home_team_id')
+        away_team_id = data.get('away_team_id')
+        match_date = data.get('match_date')
+        match_hour = data.get('match_hour')
+        match_week = data.get('match_week')
+        league = data.get('league')
+        match_city = data.get('match_city')
+        match_saloon = data.get('match_saloon')
+        
+        # Validation: Check if home and away teams are different
+        if home_team_id == away_team_id:
+            flash("Error: Home and away teams cannot be the same!", "danger")
+            return redirect(url_for('matches_page'))
+        
+        # SQL Insert
+        sql = """
+            INSERT INTO Matches (
+                match_id, home_team_id, away_team_id, match_date, match_hour,
+                match_week, league, match_city, match_saloon
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+        
+        db_api.execute(sql, (
+            match_id, home_team_id, away_team_id, match_date, match_hour,
+            match_week, league, match_city, match_saloon
+        ))
+        
+        flash(f"Match successfully added! (ID: {match_id})", "success")
+        return redirect(url_for('matches_page'))
+        
+    except Exception as e:
+        print(f"ADD MATCH ERROR: {e}")
+        flash(f"Error adding match: {e}", "danger")
+        return redirect(url_for('matches_page'))
+
+# --- MATCHES: UPDATE (Edit Match/Scores) ---
+@app.route('/matches/update', methods=['POST'])
+def update_match():
+    try:
+        data = request.form
+        
+        # Extract form data
+        match_id = data.get('match_id')
+        home_team_id = data.get('home_team_id')
+        away_team_id = data.get('away_team_id')
+        match_date = data.get('match_date')
+        match_hour = data.get('match_hour')
+        home_score = data.get('home_score')
+        away_score = data.get('away_score')
+        match_week = data.get('match_week')
+        league = data.get('league')
+        match_city = data.get('match_city')
+        match_saloon = data.get('match_saloon')
+        
+        # Validation
+        if home_team_id == away_team_id:
+            flash("Error: Home and away teams cannot be the same!", "danger")
+            return redirect(url_for('matches_page'))
+        
+        # Convert scores to int or None
+        home_score = int(home_score) if home_score and home_score.strip() else None
+        away_score = int(away_score) if away_score and away_score.strip() else None
+        
+        # SQL Update
+        sql = """
+            UPDATE Matches
+            SET home_team_id = %s,
+                away_team_id = %s,
+                match_date = %s,
+                match_hour = %s,
+                home_score = %s,
+                away_score = %s,
+                match_week = %s,
+                league = %s,
+                match_city = %s,
+                match_saloon = %s
+            WHERE match_id = %s
+        """
+        
+        db_api.execute(sql, (
+            home_team_id, away_team_id, match_date, match_hour,
+            home_score, away_score, match_week, league, match_city, match_saloon,
+            match_id
+        ))
+        
+        flash(f"Match updated! (ID: {match_id})", "success")
+        return redirect(url_for('matches_page'))
+        
+    except Exception as e:
+        print(f"UPDATE MATCH ERROR: {e}")
+        flash(f"Error updating match: {e}", "danger")
+        return redirect(url_for('matches_page'))
+
+# --- MATCHES: DELETE ---
+@app.route('/matches/delete/<string:match_id>', methods=['POST'])
+def delete_match(match_id):
+    try:
+        sql = "DELETE FROM Matches WHERE match_id = %s"
+        db_api.execute(sql, (match_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"DELETE MATCH ERROR: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 # 4. Teknik Ekip (Musa Can Turgut)
 @app.route('/staff')
@@ -415,54 +557,353 @@ def staff_page():
     # BURASI ÖNEMLİ
     return render_template('staff.html', staff=staff)
 
+def parse_numeric_filter(col_name, value, where_clauses, params):
+    """
+    Kullanıcı girdisini analiz eder: <20, >50, >=10, 15 gibi.
+    """
+    if not value:
+        return
 
-# 5. Puan Durumu (Emir Şahin)
+    value = value.strip()
+    operator = "=" # Varsayılan
+    
+    # Operatörleri kontrol et
+    if value.startswith(">="):
+        operator = ">="
+        val = value[2:]
+    elif value.startswith("<="):
+        operator = "<="
+        val = value[2:]
+    elif value.startswith(">"):
+        operator = ">"
+        val = value[1:]
+    elif value.startswith("<"):
+        operator = "<"
+        val = value[1:]
+    else:
+        # Düz sayı girildiyse eşitlik aranır
+        val = value
+    
+    # Sayısal değerin güvenli olup olmadığını kontrol et
+    if val.isdigit() or (val.startswith('-') and val[1:].isdigit()):
+        where_clauses.append(f"{col_name} {operator} %s")
+        params.append(int(val))
 @app.route('/standings')
 def standings_page():
-    # Güvenli sıralama sütunları
-    allowed_cols = {
-        "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
-        "team_points_scored","team_points_conceded","team_home_points",
-        "team_home_goal_difference","team_total_goal_difference","team_total_points"
-    }
-
-    sort = request.args.get('sort', 'team_rank')
-    if sort not in allowed_cols:
-        sort = 'team_rank'
-
-    order = request.args.get('order', 'asc').lower()
-    order_sql = 'ASC' if order == 'asc' else 'DESC'
-
-    # Optional limit
+    # ---------------------------------------------------------
+    # 1. Lig Listesi (Select Box İçin)
+    # ---------------------------------------------------------
+    league_sql = "SELECT DISTINCT league FROM standings ORDER BY league DESC"
     try:
-        limit = int(request.args.get('limit', 0))
-        if limit <= 0 or limit > 1000:
-            limit = None
-    except ValueError:
-        limit = None
+        league_rows = db_api.query(league_sql)
+        leagues = [{"league": row[0]} for row in league_rows]
+    except Exception as e:
+        print(f"Lig listesi hatası: {e}")
+        leagues = []
 
+    # ---------------------------------------------------------
+    # 2. Filtre Parametrelerini Al
+    # ---------------------------------------------------------
+    f_league = request.args.get('league')
+    f_team = request.args.get('team_name')
+    f_rank = request.args.get('team_rank') # Örn: "1,2,3"
+    
+    # Sayısal Filtreler
+    f_wins = request.args.get('team_wins')
+    f_losses = request.args.get('team_losses')
+    f_ps = request.args.get('team_points_scored')
+    f_pc = request.args.get('team_points_conceded')
+    f_points = request.args.get('team_total_points')
+
+    # Sıralama ve Limit
+    sort = request.args.get('sort', 'team_rank')
+    order = request.args.get('order', 'asc').lower()
+    
+    # Güvenli Sıralama Sütunları
+    allowed_sorts = {
+        "league", "team_rank", "team_name", "team_matches_played",
+        "team_wins", "team_losses", "team_points_scored",
+        "team_points_conceded", "team_total_points"
+    }
+    if sort not in allowed_sorts: sort = 'team_rank'
+    
+    order_sql = 'DESC' if order == 'desc' else 'ASC' # Varsayılan ASC
+
+    # ---------------------------------------------------------
+    # 3. Dinamik SQL İnşası
+    # ---------------------------------------------------------
+    base_sql = """
+        SELECT s.*, t.team_url
+        FROM standings s
+        LEFT JOIN Teams t ON s.league = t.league AND s.team_name = t.team_name
+    """
+    
+    where_clauses = []
+    params = []
+
+    # --- LİG FİLTRESİ ---
+    if f_league:
+        where_clauses.append("s.league = %s")
+        params.append(f_league)
+
+    # --- TAKIM ADI FİLTRESİ (LIKE) ---
+    if f_team:
+        where_clauses.append("s.team_name ILIKE %s") # ILIKE: Büyük/Küçük harf duyarsız
+        params.append(f"%{f_team}%")
+
+    # --- RANK FİLTRESİ (IN) ---
+    # Kullanıcı "1, 2, 5" girerse -> IN (1, 2, 5) yapar
+    if f_rank:
+        try:
+            # Virgülle ayrılmış stringi listeye çevir
+            ranks = [int(r.strip()) for r in f_rank.split(',') if r.strip().isdigit()]
+            if ranks:
+                placeholders = ', '.join(['%s'] * len(ranks))
+                where_clauses.append(f"s.team_rank IN ({placeholders})")
+                params.extend(ranks)
+        except:
+            pass # Hatalı format girerse yoksay
+
+    # --- SAYISAL FİLTRELER (<, >, = desteği) ---
+    parse_numeric_filter("s.team_wins", f_wins, where_clauses, params)
+    parse_numeric_filter("s.team_losses", f_losses, where_clauses, params)
+    parse_numeric_filter("s.team_points_scored", f_ps, where_clauses, params)
+    parse_numeric_filter("s.team_points_conceded", f_pc, where_clauses, params)
+    parse_numeric_filter("s.team_total_points", f_points, where_clauses, params)
+
+    # WHERE Koşullarını Birleştir
+    if where_clauses:
+        base_sql += " WHERE " + " AND ".join(where_clauses)
+
+    # ORDER BY Ekle
+    base_sql += f" ORDER BY s.{sort} {order_sql}"
+
+    # Sorguyu Çalıştır
+    try:
+        rows = db_api.query(base_sql, tuple(params))
+    except Exception as e:
+        print(f"Sorgu hatası: {e}")
+        rows = []
+
+    # Dictionary'e çevir
     cols = [
         "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
         "team_points_scored","team_points_conceded","team_home_points",
-        "team_home_goal_difference","team_total_goal_difference","team_total_points"
+        "team_home_goal_difference","team_total_goal_difference","team_total_points",
+        "team_url"
     ]
-    select_cols = ", ".join(cols)
-    
-    sql = f"SELECT {select_cols} FROM standings ORDER BY {sort} {order_sql}"
-    
-    if limit:
-        sql += " LIMIT %s"
-        rows = db_api.query(sql, (limit,))
-    else:
-        rows = db_api.query(sql)
-
-    # Tuple listesini Dict listesine çeviriyoruz
     standings = [dict(zip(cols, row)) for row in rows]
 
-    if request.args.get('format') == 'json':
-        return jsonify(standings)
+    return render_template(
+        'standings.html', 
+        standings=standings, 
+        leagues=leagues,
+        # Mevcut filtreleri template'e geri gönderiyoruz ki inputlar silinmesin
+        filters=request.args 
+    )
+def safe_int(value):
+    if not value:
+        return 0
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+@app.route('/standings/add', methods=['POST'])
+def add_standing():
+    try:
+        # 1. String Verileri Al
+        league = request.form.get('league')
+        team_name = request.form.get('team_name')
+
+        # 2. Sayısal Verileri Güvenli Çevir
+        rank = safe_int(request.form.get('team_rank'))
+        mp = safe_int(request.form.get('team_matches_played'))
+        wins = safe_int(request.form.get('team_wins'))
+        losses = safe_int(request.form.get('team_losses'))
+        ps = safe_int(request.form.get('team_points_scored'))
+        pc = safe_int(request.form.get('team_points_conceded'))
+        points = safe_int(request.form.get('team_total_points'))
+
+        # 3. Otomatik Hesaplamalar
+        # Averaj hesapla (Atılan - Yenen)
+        total_goal_diff = ps - pc
+
+        # 4. Kontrol: Zorunlu alanlar boş mu?
+        if not league or not team_name:
+            flash("Hata: Lig adı ve Takım adı zorunludur!", "danger")
+            return redirect(url_for('standings_page'))
+
+        # 5. SQL Sorgusu
+        # Tablonda 'team_home_points' ve 'team_home_goal_difference' zorunlu değilse 
+        # veya null olabiliyorsa sorun yok, ama biz garanti olsun diye 0 gönderiyoruz.
+        sql = """
+            INSERT INTO standings (
+                league, 
+                team_name, 
+                team_rank, 
+                team_matches_played, 
+                team_wins, 
+                team_losses, 
+                team_points_scored, 
+                team_points_conceded, 
+                team_total_points,
+                team_total_goal_difference,
+                team_home_points, 
+                team_home_goal_difference
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0)
+        """
         
-    return render_template('standings.html', standings=standings)
+        # Verileri tuple olarak hazırla
+        values = (
+            league, team_name, rank, 
+            mp, wins, losses, 
+            ps, pc, points, 
+            total_goal_diff
+        )
+
+        # Sorguyu çalıştır
+        db_api.execute(sql, values)
+
+        flash(f"{team_name} başarıyla eklendi.", "success")
+        
+    except Exception as e:
+        # HATAYI TERMİNALE YAZDIR (Debug için çok önemli)
+        print(f"####################")
+        print(f"SQL EKLEME HATASI: {e}")
+        print(f"####################")
+        flash(f"Bir hata oluştu. Detaylar terminalde yazıyor.", "danger")
+
+    return redirect(url_for('standings_page'))
+@app.route('/standings/edit', methods=['POST'])
+def edit_standing():
+    try:
+        # 1. Hedef Satırı Bulmak İçin ESKİ Veriler
+        original_league = request.form.get('original_league')
+        original_team_name = request.form.get('original_team_name')
+
+        # 2. Güncellenecek YENİ Veriler
+        new_league = request.form.get('league')
+        new_team_name = request.form.get('team_name')
+        
+        # Sayısal veriler
+        rank = safe_int(request.form.get('team_rank'))
+        mp = safe_int(request.form.get('team_matches_played'))
+        wins = safe_int(request.form.get('team_wins'))
+        losses = safe_int(request.form.get('team_losses'))
+        ps = safe_int(request.form.get('team_points_scored'))
+        pc = safe_int(request.form.get('team_points_conceded'))
+        points = safe_int(request.form.get('team_total_points'))
+
+        # Averajı tekrar hesapla
+        total_goal_diff = ps - pc
+
+        # 3. SQL UPDATE Sorgusu
+        sql = """
+            UPDATE standings
+            SET 
+                league = %s,
+                team_name = %s,
+                team_rank = %s,
+                team_matches_played = %s,
+                team_wins = %s,
+                team_losses = %s,
+                team_points_scored = %s,
+                team_points_conceded = %s,
+                team_total_points = %s,
+                team_total_goal_difference = %s
+            WHERE league = %s AND team_name = %s
+        """
+        
+        db_api.execute(sql, (
+            new_league, new_team_name, rank, mp, wins, losses, 
+            ps, pc, points, total_goal_diff,
+            original_league, original_team_name
+        ))
+
+        flash(f"{new_team_name} başarıyla güncellendi.", "success")
+        
+    except Exception as e:
+        print(f"GÜNCELLEME HATASI: {e}")
+        flash("Güncelleme sırasında hata oluştu.", "danger")
+
+    # --- EKLENEN KISIM: FİLTRELERİ KORUMA ---
+    return_url = request.form.get('return_url')
+    if return_url:
+        return redirect(return_url)
+    
+    return redirect(url_for('standings_page'))
+@app.route('/standings/delete', methods=['POST'])
+def delete_standing():
+    try:
+        # Silinecek satırın kimlik bilgileri
+        league = request.form.get('league')
+        team_name = request.form.get('team_name')
+
+        # SQL Sorgusu
+        sql = "DELETE FROM standings WHERE league = %s AND team_name = %s"
+        db_api.execute(sql, (league, team_name))
+
+        flash(f"{team_name} başarıyla silindi.", "warning") # Uyarı rengi (sarı)
+        
+    except Exception as e:
+        print(f"SİLME HATASI: {e}")
+        flash(f"Silme sırasında hata oluştu: {e}", "danger")
+
+    # Filtrelerin olduğu sayfaya geri dön
+    return_url = request.form.get('return_url')
+    if return_url:
+        return redirect(return_url)
+    return redirect(url_for('standings_page'))
+@app.route('/teams/<int:team_id>/players')
+def team_players_page(team_id):
+    # 1. Önce Takım Adını ve Bilgilerini Çekelim (Başlık için)
+    team_query = "SELECT team_name, league, team_url FROM Teams WHERE team_id = %s"
+    try:
+        team_row = db_api.query(team_query, (team_id,))
+        if not team_row:
+            return "Takım bulunamadı!", 404
+        
+        # Tuple'dan veriyi alalım
+        team_info = {
+            "name": team_row[0][0],
+            "league": team_row[0][1],
+            "url": team_row[0][2]
+        }
+    except Exception as e:
+        return f"Takım bilgisi hatası: {e}"
+
+    # 2. O Takıma Ait Oyuncuları Çekelim
+    players_query = """
+        SELECT 
+            player_id, 
+            player_name, 
+            player_height, 
+            player_birthdate, 
+            league
+        FROM Players 
+        WHERE team_id = %s
+        ORDER BY player_name ASC
+    """
+    
+    try:
+        player_rows = db_api.query(players_query, (team_id,))
+    except Exception as e:
+        print(f"Oyuncu sorgu hatası: {e}")
+        player_rows = []
+
+    players = []
+    for row in player_rows:
+        players.append({
+            "player_id": row[0],
+            "player_name": row[1],
+            "player_height": row[2],
+            "player_birthdate": row[3],
+            "league": row[4]
+        })
+
+    # Verileri yeni bir HTML sayfasına gönderiyoruz
+    return render_template('team_players.html', team=team_info, players=players)
 
 if __name__ == '__main__':
     app.run(debug=True)

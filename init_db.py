@@ -139,15 +139,29 @@ def load_csv_using_conn(conn, spec: TableSpec):
 def ensure_table_and_load(spec: TableSpec) -> int:
     print(f"[init_db] Ensuring table {spec.name} ...")
     db_api.execute(spec.ddl)
+    
+    # --- EKLENEN KISIM BAŞLANGIÇ ---
+    # Eğer truncate True ise ve tablo varsa içini boşalt
+    if spec.truncate:
+        print(f"[init_db] Truncating table {spec.name}...")
+        try:
+            # CASCADE ekledik ki bağlı veriler sorun çıkarmasın
+            db_api.execute(f"TRUNCATE TABLE {spec.name} CASCADE")
+        except Exception as e:
+            # Tablo henüz yoksa hata verebilir, yoksayıyoruz
+            print(f"[init_db] Truncate warning (might be new table): {e}")
+    # --- EKLENEN KISIM BİTİŞ ---
+
     if spec.csv_path:
         conn = db_api.get_conn()
         try:
             count = load_csv_using_conn(conn, spec)
-            conn.commit()
+            conn.commit() # Transaction'ı onayla
             print(f"[init_db] Loaded {count} rows into {spec.name}")
             return count
-        except Exception:
+        except Exception as e:
             conn.rollback()
+            print(f"[init_db] Error loading CSV for {spec.name}: {e}")
             raise
         finally:
             db_api.put_conn(conn)
@@ -235,11 +249,12 @@ TABLE_SPECS = [
     # 3. Standings
     TableSpec(
         name="standings",
+        # UNIQUE (league, team_name) ekliyoruz veya composite PRIMARY KEY yapıyoruz
         ddl="""
             CREATE TABLE IF NOT EXISTS standings (
               league TEXT NOT NULL,
               team_rank INTEGER,
-              team_name TEXT,
+              team_name TEXT NOT NULL,
               team_matches_played INTEGER,
               team_wins INTEGER,
               team_losses INTEGER,
@@ -248,7 +263,8 @@ TABLE_SPECS = [
               team_home_points INTEGER,
               team_home_goal_difference INTEGER,
               team_total_goal_difference INTEGER,
-              team_total_points INTEGER
+              team_total_points INTEGER,
+              PRIMARY KEY (league, team_name) 
             );
         """,
         columns=[
@@ -266,8 +282,8 @@ TABLE_SPECS = [
             "team_total_points",
         ],
         csv_path=os.path.join(BASE_DIR, "tables", "standings.csv"),
+        truncate=True, 
     ),
-
     # 4. Players
     TableSpec(
         name="Players",
