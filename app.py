@@ -34,8 +34,10 @@ def players_page():
 
     return render_template('players_table.html', players=all_players)
 
+
 def players_menu():
     return render_template('players.html')
+
 
 # 2. Oyuncu Tablosu (Veritabanı sorgusu buraya taşındı)
 @app.route('/players/table')
@@ -68,9 +70,10 @@ def players_table_page():
             "team_url": row[6]
         })
 
-    return render_template('players_table.html', players=players)   
+    return render_template('players_table.html', players=players)
 
 
+<<<<<<< Updated upstream
 # 2. Takımlar (Talip Demir)
 @app.route('/teams')
 def teams_page():
@@ -85,6 +88,18 @@ def teams_page():
     return render_template('teams.html', teams=all_teams)
 
     # Detaylı takım verilerini team_data tablosundan çekiyoruz
+=======
+# --- 1. TAKIM ANA MENÜ (Yönlendirme) ---
+@app.route('/teams')
+def teams_menu():
+    return redirect(url_for('teams_table_page'))
+
+
+# --- 2. TAKIM TABLO GÖRÜNÜMÜ (/teams/table) ---
+@app.route('/teams/table')
+def teams_table_page():
+    # Tüm verileri çekiyoruz (En güncel lig en üstte)
+>>>>>>> Stashed changes
     query = """
         SELECT 
             team_id, team_name, team_city, team_year, 
@@ -92,8 +107,18 @@ def teams_page():
         FROM team_data
         ORDER BY team_name
     """
+<<<<<<< Updated upstream
     rows = db_api.query(query)
     
+=======
+
+    try:
+        rows = db_api.query(query)
+    except Exception as e:
+        print(f"Sorgu Hatası: {e}")
+        rows = []
+
+>>>>>>> Stashed changes
     teams = []
     for row in rows:
         teams.append({
@@ -110,12 +135,97 @@ def teams_page():
     return render_template('teams.html', teams=teams)
 
 
+<<<<<<< Updated upstream
 # 3. Maçlar (Celil Aslan)
 @app.route('/matches')
 def matches_page():
     # Maç verilerini çekerken Ev Sahibi ve Deplasman takımlarının isimlerini getirmek için
     # teams tablosuna İKİ KEZ join yapıyoruz (t1: home, t2: away)
     query = """
+=======
+# --- 3. TAKIM EKLEME İŞLEMİ (/teams/add) ---
+@app.route('/teams/add', methods=['POST'])
+def add_team():
+    try:
+        data = request.form
+        
+        # Form verilerini al
+        t_id = data.get('team_id')
+        t_name = data.get('team_name')
+        t_city = data.get('team_city')
+        t_league = data.get('league')
+        t_url = data.get('team_url')
+        s_name = data.get('saloon_name')
+        s_addr = data.get('saloon_address')
+        
+        # Staff ID
+        s_id = data.get('staff_id')
+        s_id = int(s_id) if s_id and s_id.strip() else None
+
+        # Kapasite
+        s_cap = data.get('saloon_capacity')
+        s_cap = int(s_cap) if s_cap and s_cap.strip() else None
+
+        # Yıl
+        t_year = data.get('team_year')
+        t_year = int(t_year) if t_year and t_year.strip() else None
+
+        query = """
+            INSERT INTO Teams (
+                team_id, team_name, team_city, team_year, league, 
+                staff_id, team_url, saloon_name, saloon_capacity, saloon_address
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """
+
+        db_api.execute(query, (
+            t_id, t_name, t_city, t_year, t_league, 
+            s_id, t_url, s_name, s_cap, s_addr
+        ))
+        
+        return redirect(url_for('teams_table_page'))
+
+    except Exception as e:
+        return f"<h3>Ekleme Başarısız!</h3><p>Hata Detayı: {e}</p><br><a href='/teams/table'>Geri Dön</a>"
+
+
+# --- 4. TAKIM SİLME İŞLEMİ (/teams/delete/ID) ---
+@app.route('/teams/delete/<int:team_id>', methods=['POST'])
+def delete_team(team_id):
+    try:
+        sql = "DELETE FROM Teams WHERE team_id = %s"
+        db_api.execute(sql, (team_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+# 3. Maçlar (Celil Aslan)
+@app.route('/matches')
+def matches_page():
+    # Filtreleme parametreleri
+    sort_by = request.args.get('sort', 'match_date')
+    order = request.args.get('order', 'desc')
+    limit = request.args.get('limit', '100')
+    fmt = request.args.get('format', 'html')
+    
+    # SQL injection koruması
+    allowed_cols = ['match_date', 'match_week', 'league', 'match_city']
+    if sort_by not in allowed_cols:
+        sort_by = 'match_date'
+    
+    if order not in ['asc', 'desc']:
+        order = 'desc'
+    
+    try:
+        limit = int(limit)
+        if limit < 1 or limit > 10000:
+            limit = 100
+    except:
+        limit = 100
+    
+    query = f"""
+>>>>>>> Stashed changes
         SELECT 
             m.match_id,
             m.match_date, 
@@ -152,39 +262,186 @@ def matches_page():
 
     return render_template('matches.html', matches=matches)
 
+
 # 4. Teknik Ekip (Musa Can Turgut)
 @app.route('/staff')
 def staff_page():
-    # Teknik ekip ve takım isimleri
-    query = """
+    # --- Sayfa numarası ---
+    page_param = request.args.get('page', '1')
+    try:
+        page = int(page_param)
+        if page < 1:
+            page = 1
+    except ValueError:
+        page = 1
+
+    limit = 50
+    offset = (page - 1) * limit
+
+    # --- Filtre parametreleri ---
+    search = (request.args.get('search') or '').strip()
+    team_filter = (request.args.get('team') or '').strip()
+    role_filter = (request.args.get('role') or '').strip()
+
+    where_clauses = []
+    params = []
+
+    if search:
+        where_clauses.append("LOWER(tr.technic_member_name) LIKE %s")
+        params.append(f"%{search.lower()}%")
+
+    if team_filter:
+        where_clauses.append("t.team_name = %s")
+        params.append(team_filter)
+
+    if role_filter:
+        where_clauses.append("tr.technic_member_role = %s")
+        params.append(role_filter)
+
+    where_sql = ""
+    if where_clauses:
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+    # --- Toplam satır sayısı (filtreli) ---
+    count_sql = f"""
+        SELECT COUNT(*)
+        FROM technic_roster tr
+        JOIN teams t ON tr.team_id = t.team_id
+        {where_sql}
+    """
+    total_rows = db_api.query(count_sql, tuple(params))[0][0]
+
+    # --- Asıl veri (filtreli + sayfalı) ---
+    data_sql = f"""
         SELECT 
+            tr.staff_id,
             tr.technic_member_name, 
             tr.technic_member_role, 
             t.team_name, 
             tr.league
         FROM technic_roster tr
         JOIN teams t ON tr.team_id = t.team_id
+        {where_sql}
         ORDER BY t.team_name, tr.technic_member_name
+        LIMIT %s OFFSET %s
     """
-    rows = db_api.query(query)
-    
+    data_params = params + [limit, offset]
+    rows = db_api.query(data_sql, tuple(data_params))
+
     staff = []
     for row in rows:
         staff.append({
-            "name": row[0],
-            "role": row[1],
-            "team_name": row[2],
-            "league": row[3]
+            "staff_id": row[0],
+            "name": row[1],
+            "role": row[2],
+            "team_name": row[3],
+            "league": row[4],
         })
 
-    # BURASI ÖNEMLİ
-    return render_template('staff.html', staff=staff)
+    # --- Filtre dropdownları için tüm takımlar / roller ---
+    teams_rows = db_api.query("""
+        SELECT DISTINCT team_name
+        FROM Teams
+        WHERE team_name IS NOT NULL
+        ORDER BY team_name ASC
+    """)
+    filter_teams = [r[0] for r in teams_rows]
+
+    roles_rows = db_api.query("""
+        SELECT DISTINCT technic_member_role
+        FROM technic_roster
+        WHERE technic_member_role IS NOT NULL
+        ORDER BY technic_member_role ASC
+    """)
+    roles = [r[0] for r in roles_rows]
+
+    # Yeni staff ekleme modalı için team_id + isim listesi
+    teams_full_rows = db_api.query("""
+        SELECT team_id, team_name, league
+        FROM Teams
+        ORDER BY league DESC, team_name ASC
+    """)
+    teams = []
+    for r in teams_full_rows:
+        teams.append({
+            "team_id": r[0],
+            "team_name": r[1],
+            "league": r[2],
+        })
+
+    # --- Toplam sayfa sayısı ---
+    total_pages = (total_rows + limit - 1) // limit if total_rows > 0 else 1
+
+    return render_template(
+        'staff.html',
+        staff=staff,
+        teams=teams,
+        filter_teams=filter_teams,
+        roles=roles,
+        current_page=page,
+        total_pages=total_pages,
+        search=search,
+        selected_team=team_filter,
+        selected_role=role_filter,
+    )
+
+# --- Teknik Ekip EKLEME ---
+@app.route('/staff/add', methods=['POST'])
+def add_staff():
+    try:
+        data = request.form
+        name = data.get('technic_member_name')
+        role = data.get('technic_member_role')
+        league = data.get('league')
+        team_id = data.get('team_id')
+        team_url = data.get('team_url')
+
+        if not name or not team_id:
+            return "Name ve Team ID zorunludur.", 400
+
+        team_id_val = int(team_id) if team_id and team_id.strip() else None
+
+        sql = """
+            INSERT INTO technic_roster (team_id, team_url, league, technic_member_name, technic_member_role)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+        db_api.execute(sql, (team_id_val, team_url, league, name, role))
+
+        return redirect(url_for('staff_page'))
+    except Exception as e:
+        return f"Ekleme Hatası: {e}", 500
+
+
+# --- Teknik Ekip SİLME ---
+@app.route('/staff/delete/<int:staff_id>', methods=['POST'])
+def delete_staff(staff_id):
+    try:
+        sql = "DELETE FROM technic_roster WHERE staff_id = %s"
+        db_api.execute(sql, (staff_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 # 5. Puan Durumu (Emir Şahin)
 @app.route('/standings')
 def standings_page():
+<<<<<<< Updated upstream
     # Güvenli sıralama sütunları
+=======
+    # 1: Lig listesini çek
+    league_sql = "SELECT DISTINCT league FROM standings ORDER BY league DESC"
+    try:
+        league_rows = db_api.query(league_sql)
+        leagues = [{"league": row[0]} for row in league_rows]
+    except Exception as e:
+        print(f"Lig listesi hatası: {e}")
+        leagues = []
+
+    # 2: Parametreleri al
+    selected_league = request.args.get('league')
+
+>>>>>>> Stashed changes
     allowed_cols = {
         "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
         "team_points_scored","team_points_conceded","team_home_points",
@@ -198,7 +455,10 @@ def standings_page():
     order = request.args.get('order', 'asc').lower()
     order_sql = 'ASC' if order == 'asc' else 'DESC'
 
+<<<<<<< Updated upstream
     # Optional limit
+=======
+>>>>>>> Stashed changes
     try:
         limit = int(request.args.get('limit', 0))
         if limit <= 0 or limit > 1000:
@@ -206,6 +466,7 @@ def standings_page():
     except ValueError:
         limit = None
 
+<<<<<<< Updated upstream
     cols = [
         "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
         "team_points_scored","team_points_conceded","team_home_points",
@@ -220,14 +481,56 @@ def standings_page():
         rows = db_api.query(sql, (limit,))
     else:
         rows = db_api.query(sql)
+=======
+    # 3: Ana sorgu
+    sql = """
+        SELECT 
+            s.*, 
+            t.team_url
+        FROM standings s
+        LEFT JOIN Teams t 
+            ON s.league = t.league 
+            AND s.team_name = t.team_name
+    """
+    
+    params = []
 
-    # Tuple listesini Dict listesine çeviriyoruz
+    if selected_league:
+        sql += " WHERE s.league = %s"
+        params.append(selected_league)
+    
+    sql += f" ORDER BY s.{sort} {order_sql}"
+
+    if limit:
+        sql += " LIMIT %s"
+        params.append(limit)
+
+    rows = db_api.query(sql, tuple(params))
+
+    cols = [
+        "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
+        "team_points_scored","team_points_conceded","team_home_points",
+        "team_home_goal_difference","team_total_goal_difference","team_total_points",
+        "team_url"
+    ]
+>>>>>>> Stashed changes
+
     standings = [dict(zip(cols, row)) for row in rows]
 
     if request.args.get('format') == 'json':
         return jsonify(standings)
         
+<<<<<<< Updated upstream
     return render_template('standings.html', standings=standings)
+=======
+    return render_template(
+        'standings.html', 
+        standings=standings, 
+        leagues=leagues, 
+        current_league=selected_league
+    )
+>>>>>>> Stashed changes
+
 
 if __name__ == '__main__':
     app.run(debug=True)

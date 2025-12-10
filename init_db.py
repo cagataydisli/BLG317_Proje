@@ -62,6 +62,30 @@ def _default_row_converter(row: dict, columns: List[str]):
             vals.append(v)
     return tuple(vals)
 
+<<<<<<< Updated upstream
+=======
+
+def teams_row_converter(row: dict) -> tuple:
+    # 1. ID, Yıl (Sayı)
+    t_id = _extract_first_int(row.get('team_id'))
+    year = _extract_first_int(row.get('team_year'))
+    
+    # 2. String Alanlar
+    url = row.get('team_url')
+    name = row.get('team_name')
+    league = row.get('league')
+    
+    city = row.get('team_city', '').strip() if row.get('team_city') else None
+    s_name = row.get('saloon_name', '').strip() if row.get('saloon_name') else None
+    addr = row.get('saloon_address', '').strip() if row.get('saloon_address') else None
+    
+    # 3. Kapasite
+    raw_cap = row.get('saloon_capacity', '')
+    cap = _extract_first_int(raw_cap)
+
+    return (t_id, url, name, league, city, year, s_name, cap, addr)
+
+>>>>>>> Stashed changes
 
 def load_csv_using_conn(conn, spec: TableSpec):
     if not spec.csv_path or not os.path.exists(spec.csv_path):
@@ -116,6 +140,18 @@ def load_csv_using_conn(conn, spec: TableSpec):
 def ensure_table_and_load(spec: TableSpec) -> int:
     print(f"[init_db] Ensuring table {spec.name} ...")
     db_api.execute(spec.ddl)
+<<<<<<< Updated upstream
+=======
+    
+    # Eğer truncate True ise ve tablo varsa içini boşalt
+    if spec.truncate:
+        print(f"[init_db] Truncating table {spec.name}...")
+        try:
+            db_api.execute(f"TRUNCATE TABLE {spec.name} CASCADE")
+        except Exception as e:
+            print(f"[init_db] Truncate warning (might be new table): {e}")
+
+>>>>>>> Stashed changes
     if spec.csv_path:
         conn = db_api.get_conn()
         try:
