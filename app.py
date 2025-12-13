@@ -4,9 +4,99 @@ from flask import flash
 import database.db as db_api
 from datetime import datetime # En tepeye bunu ekle
 import math # En tepeye eklemeyi unutma (sayfa sayısını yukarı yuvarlamak için)
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = "345678987654345678"
+
+# --- LOGIN MANAGER KURULUMU ---
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login' # Giriş yapılmamışsa buraya yönlendir
+
+# Kullanıcı Modeli (Flask-Login için gerekli)
+class User(UserMixin):
+    def __init__(self, id, username, password_hash):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
+
+@login_manager.user_loader
+def load_user(user_id):
+    # Veritabanından kullanıcıyı ID ile bulup getirir
+    sql = "SELECT id, username, password_hash FROM Users WHERE id = %s"
+    row = db_api.query(sql, (user_id,))
+    if row:
+        return User(row[0][0], row[0][1], row[0][2])
+    return None
+
+
+# --- GİRİŞ YAP (LOGIN) ---
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        # Kullanıcıyı bul
+        sql = "SELECT id, username, password_hash FROM Users WHERE username = %s"
+        user_data = db_api.query(sql, (username,))
+
+        if user_data:
+            user_obj = User(user_data[0][0], user_data[0][1], user_data[0][2])
+            # Şifre doğru mu kontrol et
+            if check_password_hash(user_obj.password_hash, password):
+                login_user(user_obj)
+                flash('Giriş başarılı!', 'success')
+                # Eğer daha önce gitmek istediği bir sayfa varsa oraya, yoksa anasayfaya
+                next_page = request.args.get('next')
+                return redirect(next_page or url_for('index'))
+
+        flash('Hatalı kullanıcı adı veya şifre', 'danger')
+
+    return render_template('login.html')
+
+
+# --- KAYIT OL (REGISTER) ---
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        # Basit validasyon
+        if not username or not password:
+            flash("Kullanıcı adı ve şifre zorunlu", "warning")
+            return redirect(url_for('register'))
+
+        # Şifreyi güvenli hale getir (Hashle)
+        hashed_pw = generate_password_hash(password)
+
+        try:
+            sql = "INSERT INTO Users (username, password_hash) VALUES (%s, %s)"
+            db_api.execute(sql, (username, hashed_pw))
+            flash('Hesap oluşturuldu! Şimdi giriş yapabilirsiniz.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            flash(f'Hata (Kullanıcı adı alınmış olabilir): {e}', 'danger')
+
+    return render_template('register.html')
+
+
+# --- ÇIKIŞ YAP (LOGOUT) ---
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Çıkış yapıldı.', 'info')
+    return redirect(url_for('login'))
+
+
+
+
+
+
 # Ana Sayfa Route'u
 @app.route('/')
 def index():
@@ -27,6 +117,22 @@ def players_page():
         page = 1
         per_page = 20
 
+    try:
+        # GROUP BY team_name: Aynı isimdeki takımları grupla.
+        # MIN(team_id): Her grubun ilk ID'sini al (Select kutusu için bir ID lazım).
+        query = """
+                SELECT MIN(team_id), team_name 
+                FROM Teams 
+                GROUP BY team_name 
+                ORDER BY team_name
+            """
+        teams_data = db_api.query(query)
+
+        teams_dropdown = [{'id': r[0], 'name': r[1]} for r in teams_data]
+    except Exception as e:
+        print(f"Takım listesi hatası: {e}")
+        teams_dropdown = []
+
     # Filtre Parametreleri
     selected_teams = request.args.getlist('teams')
     selected_leagues = request.args.getlist('leagues')
@@ -41,7 +147,7 @@ def players_page():
     # --- 3. SQL ile Veriyi Çek ---
     sql = """
         SELECT p.player_id, p.player_name, p.player_height, p.player_birthdate, 
-               p.league, t.team_name, p.team_url
+               p.league, t.team_name, p.team_url, p.team_id
         FROM players p
         LEFT JOIN teams t ON p.team_id = t.team_id
         WHERE 1=1
@@ -73,7 +179,7 @@ def players_page():
     today = datetime.now()
 
     for row in rows:
-        p_id, p_name, p_height, p_birth, p_league, t_name, t_url = row
+        p_id, p_name, p_height, p_birth, p_league, t_name, t_url, t_id = row
 
         age = 0
         birth_date_obj = datetime.min
@@ -95,6 +201,7 @@ def players_page():
             "league": p_league,
             "team_name": t_name,
             "team_url": t_url,
+            "team_id": t_id,  # Bunu da sözlüğe ekledik
             "sort_date": birth_date_obj,
             "sort_height": int(''.join(filter(str.isdigit, p_height))) if p_height and any(
                 c.isdigit() for c in p_height) else 0
@@ -127,6 +234,7 @@ def players_page():
 
     return render_template('players_table.html',
                            players=paginated_players,
+                           teams_dropdown=teams_dropdown,
                            all_teams=all_teams,
                            all_leagues=all_leagues,
                            selected_teams=selected_teams,
@@ -140,34 +248,44 @@ def players_page():
 
 # --- YENİ OYUNCU EKLEME ---
 @app.route('/players/add', methods=['POST'])
+@login_required
 def add_player():
     try:
         data = request.form
-        player_id = data.get('player_id')
+
+        # player_id'yi ARTIK FORM'DAN ALMIYORUZ
+        # player_id = data.get('player_id')  <-- BU SATIR SİLİNDİ/YORUM SATIRI OLDU
+
         player_name = data.get('player_name')
         team_id = data.get('team_id')
         height = data.get('player_height')
         birthdate = data.get('player_birthdate')
         league = data.get('league')
 
-        # SQL Ekleme Sorgusu
+        # SQL Ekleme Sorgusu (player_id sütununu ve değerini kaldırdık)
         sql = """
-            INSERT INTO Players (player_id, player_name, team_id, player_height, player_birthdate, league)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO Players (player_name, team_id, player_height, player_birthdate, league)
+            VALUES (%s, %s, %s, %s, %s)
         """
 
         if not team_id:
             team_id = None
 
-        db_api.execute(sql, (player_id, player_name, team_id, height, birthdate, league))
+        # execute kısmından da player_id'yi siliyoruz
+        db_api.execute(sql, (player_name, team_id, height, birthdate, league))
 
+        flash(f"{player_name} başarıyla eklendi.", "success")  # Kullanıcıya bilgi verelim
         return redirect(url_for('players_page'))
     except Exception as e:
-        return f"Ekleme Hatası: {e}"
+        # Hata mesajını terminale yazdıralım ki görelim
+        print(f"Ekleme Hatası: {e}")
+        flash(f"Ekleme Hatası: {e}", "danger")
+        return redirect(url_for('players_page'))
 
 
 # --- OYUNCU SİLME ---
 @app.route('/players/delete/<int:player_id>', methods=['POST'])
+@login_required
 def delete_player(player_id):
     try:
         sql = "DELETE FROM Players WHERE player_id = %s"
@@ -175,6 +293,46 @@ def delete_player(player_id):
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+
+# --- OYUNCU GÜNCELLEME (UPDATE) ---
+@app.route('/players/update', methods=['POST'])
+@login_required
+def update_player():
+    try:
+        data = request.form
+
+        # Formdan gelen veriler
+        player_id = data.get('player_id')  # WHERE koşulu için gerekli
+        player_name = data.get('player_name')
+        team_id = data.get('team_id')
+        height = data.get('player_height')
+        birthdate = data.get('player_birthdate')
+        league = data.get('league')
+
+        # team_id boş gelirse None yap (SQL hatası almamak için)
+        if not team_id or team_id.strip() == "":
+            team_id = None
+
+        # SQL Update Sorgusu
+        sql = """
+            UPDATE Players 
+            SET player_name = %s, 
+                team_id = %s, 
+                player_height = %s, 
+                player_birthdate = %s, 
+                league = %s
+            WHERE player_id = %s
+        """
+
+        db_api.execute(sql, (player_name, team_id, height, birthdate, league, player_id))
+
+        flash(f"Oyuncu ({player_name}) başarıyla güncellendi.", "success")
+        return redirect(url_for('players_page'))
+
+    except Exception as e:
+        print(f"Güncelleme Hatası: {e}")
+        return f"Güncelleme Hatası: {e}"
 
 def players_menu():
     return render_template('players.html')
@@ -904,6 +1062,10 @@ def team_players_page(team_id):
 
     # Verileri yeni bir HTML sayfasına gönderiyoruz
     return render_template('team_players.html', team=team_info, players=players)
+
+
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)

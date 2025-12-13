@@ -11,13 +11,19 @@
         </div>
 
         <div>
-            <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
-                ✏️ Düzenle
-            </button>
-
-            <button id="addPlayerBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addPlayerModal">
-                + Yeni Oyuncu
-            </button>
+            {% if current_user.is_authenticated %}
+                <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
+                    ✏️ Düzenle
+                </button>
+                <button id="addPlayerBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addPlayerModal">
+                    + Yeni Oyuncu
+                </button>
+                <a href="/logout" class="btn btn-danger ms-2">Çıkış Yap ({{ current_user.username }})</a>
+            {% else %}
+                <a href="/login" class="btn btn-primary">
+                    🔒 Düzenlemek için Giriş Yap
+                </a>
+            {% endif %}
         </div>
     </div>
 
@@ -124,8 +130,21 @@
                 <td>{{ player.league or '-' }}</td>
 
                 <td class="delete-col d-none">
+                    <button class="btn btn-sm btn-warning me-1"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editPlayerModal"
+                            onclick="fillEditModal(
+                                '{{ player.player_id }}',
+                                '{{ player.player_name }}',
+                                '{{ player.team_id }}',
+                                '{{ player.player_height }}',
+                                '{{ player.player_birthdate }}',
+                                '{{ player.league }}'
+                            )">
+                        ✏️
+                    </button>
                     <button class="btn btn-sm btn-danger" onclick="deletePlayer({{ player.player_id }})">
-                        🗑️ Sil
+                        🗑️
                     </button>
                 </td>
             </tr>
@@ -174,16 +193,17 @@
       <div class="modal-body">
         <form action="/players/add" method="POST">
             <div class="mb-2">
-                <label>Oyuncu ID (Benzersiz):</label>
-                <input type="number" name="player_id" class="form-control" required>
-            </div>
-            <div class="mb-2">
                 <label>Ad Soyad:</label>
                 <input type="text" name="player_name" class="form-control" required>
             </div>
             <div class="mb-2">
-                <label>Takım ID (Opsiyonel):</label>
-                <input type="number" name="team_id" class="form-control" placeholder="Örn: 101">
+                <label>Takım:</label>
+                <select name="team_id" class="form-select">
+                    <option value="">-- Takımsız --</option>
+                    {% for team in teams_dropdown %}
+                        <option value="{{ team.id }}">{{ team.name }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="mb-2">
                 <label>Boy:</label>
@@ -198,6 +218,51 @@
                 <input type="text" name="league" class="form-control">
             </div>
             <button type="submit" class="btn btn-primary w-100 mt-3">Kaydet</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editPlayerModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Oyuncu Düzenle</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form action="/players/update" method="POST">
+            <div class="mb-2">
+                <label>Oyuncu ID:</label>
+                <input type="number" name="player_id" id="edit_player_id" class="form-control" readonly>
+            </div>
+            <div class="mb-2">
+                <label>Ad Soyad:</label>
+                <input type="text" name="player_name" id="edit_player_name" class="form-control" required>
+            </div>
+            <div class="mb-2">
+                <label>Takım:</label>
+                <select name="team_id" id="edit_team_id" class="form-select">
+                    <option value="">-- Takımsız --</option>
+                    {% for team in teams_dropdown %}
+                        <option value="{{ team.id }}">{{ team.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-2">
+                <label>Boy:</label>
+                <input type="text" name="player_height" id="edit_player_height" class="form-control">
+            </div>
+            <div class="mb-2">
+                <label>Doğum Tarihi:</label>
+                <input type="text" name="player_birthdate" id="edit_player_birthdate" class="form-control">
+            </div>
+            <div class="mb-2">
+                <label>Lig:</label>
+                <input type="text" name="league" id="edit_player_league" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-warning w-100 mt-3">Güncelle</button>
         </form>
       </div>
     </div>
@@ -240,6 +305,19 @@
             }
         })
         .catch(err => alert("Hata: " + err));
+    }
+
+    function fillEditModal(id, name, teamId, height, birthdate, league) {
+        document.getElementById('edit_player_id').value = id;
+        document.getElementById('edit_player_name').value = name;
+
+        // Dropdown'da ilgili ID'yi seçili yap
+        // (Eğer oyuncunun takımı yoksa veya None ise boş gelir)
+        document.getElementById('edit_team_id').value = teamId ? teamId : "";
+
+        document.getElementById('edit_player_height').value = height;
+        document.getElementById('edit_player_birthdate').value = birthdate;
+        document.getElementById('edit_player_league').value = league;
     }
 </script>
 
