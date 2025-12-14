@@ -4,24 +4,54 @@
 
 {% block content %}
 <div class="container mt-4">
+    <!-- Üst Başlık ve Aksiyonlar -->
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h2>Takım Listesi</h2>
             <a href="/" class="btn btn-sm btn-outline-secondary">← Ana Sayfa</a>
         </div>
 
-        <div>
+        <div class="d-flex gap-2">
+            <!-- Düzenle Butonu -->
             <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
                 ✏️ Düzenle
             </button>
+
+            <!-- Yeni Takım Ekle Butonu -->
             <button id="addTeamBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addTeamModal">
                 + Yeni Takım
             </button>
         </div>
     </div>
 
-    <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
+    <!-- SEZON FİLTRESİ (YENİ EKLENDİ) -->
+    <div class="card mb-4 bg-light border-0">
+        <div class="card-body py-2">
+            <form action="/teams/table" method="GET" class="d-flex align-items-center gap-3">
+                <label class="fw-bold text-secondary mb-0">Sezon Seçiniz:</label>
+                <select name="season" class="form-select w-auto" onchange="this.form.submit()">
+                    <option value="all" {% if current_season == 'all' or not current_season %}selected{% endif %}>
+                        Tüm Sezonlar
+                    </option>
+                    {% for season in seasons %}
+                        <option value="{{ season }}" {% if current_season == season %}selected{% endif %}>
+                            {{ season }}
+                        </option>
+                    {% endfor %}
+                </select>
+                {% if current_season and current_season != 'all' %}
+                    <small class="text-muted">
+                        Şu an <strong>{{ current_season }}</strong> sezonu gösteriliyor.
+                        <a href="/teams/table">Filtreyi Temizle</a>
+                    </small>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+
+    <!-- Takım Tablosu -->
+    <div class="table-responsive shadow-sm">
+        <table class="table table-striped table-hover align-middle mb-0">
             <thead class="table-dark">
                 <tr>
                     <th>ID</th>
@@ -37,10 +67,8 @@
             <tbody>
                 {% for team in teams %}
                 <tr id="row-{{ team.team_id }}">
-                    <!-- Takım ID -->
                     <td><strong>{{ team.team_id }}</strong></td>
                     
-                    <!-- Staff ID -->
                     <td>
                         {% if team.staff_id %}
                             <span class="badge bg-secondary">{{ team.staff_id }}</span>
@@ -49,33 +77,22 @@
                         {% endif %}
                     </td>
                     
-                    <!-- Lig -->
                     <td><span class="badge bg-info text-dark">{{ team.league or '-' }}</span></td>
                     
-                    <!-- İsim ve Link Sütunu (GÜNCELLENEN KISIM) -->
                     <td>
                         <!-- İsim -> Oyuncu Sayfasına -->
                         <a href="/teams/{{ team.team_id }}/players" class="fw-bold text-decoration-none text-dark">
                             {{ team.team_name }}
                         </a>
-
                         <!-- İkon -> Resmi Siteye -->
                         {% if team.team_url %}
-                            <a href="{{ team.team_url }}" target="_blank" class="text-primary ms-1" title="Resmi Siteye Git">
-                                🔗
-                            </a>
-                        {% endif %}
-                        
-                        {% if team.staff_id %}
-                            <div class="text-muted" style="font-size: 0.75rem;">Staff ID: {{ team.staff_id }}</div>
+                            <a href="{{ team.team_url }}" target="_blank" class="text-primary ms-1" title="Resmi Site">🔗</a>
                         {% endif %}
                     </td>
                     
-                    <!-- Şehir ve Yıl -->
                     <td>{{ team.team_city or '-' }}</td>
                     <td>{{ team.team_year or '-' }}</td>
                     
-                    <!-- Salon Bilgileri -->
                     <td>
                         <div class="fw-bold">{{ team.saloon_name or '-' }}</div>
                         <small class="text-muted">
@@ -87,17 +104,14 @@
                         </small>
                     </td>
 
-                    <!-- Silme Butonu -->
                     <td class="delete-col d-none">
-                        <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ team.team_id }})">
-                            🗑️ Sil
-                        </button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ team.team_id }})">🗑️ Sil</button>
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="8" class="text-center py-4">
-                        <p class="text-muted mb-0">Henüz kayıtlı bir takım bulunmamaktadır.</p>
+                    <td colspan="8" class="text-center py-5">
+                        <h5 class="text-muted">Bu sezona ait takım bulunamadı.</h5>
                     </td>
                 </tr>
                 {% endfor %}
@@ -180,10 +194,8 @@
         const deleteCols = document.querySelectorAll('.delete-col');
         const addBtn = document.getElementById('addTeamBtn');
         const editBtn = document.getElementById('toggleEditMode');
-
         deleteCols.forEach(col => col.classList.toggle('d-none'));
         addBtn.classList.toggle('d-none');
-
         if (addBtn.classList.contains('d-none')) {
             editBtn.innerHTML = "✏️ Düzenle";
             editBtn.classList.replace("btn-secondary", "btn-outline-primary");
@@ -192,10 +204,8 @@
             editBtn.classList.replace("btn-outline-primary", "btn-secondary");
         }
     }
-
     function deleteTeam(id) {
         if(!confirm("Bu takımı silmek istediğine emin misin?")) return;
-        
         fetch('/teams/delete/' + id, { method: 'POST' })
         .then(response => response.json())
         .then(data => {

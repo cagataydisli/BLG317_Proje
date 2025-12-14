@@ -382,8 +382,21 @@ def teams_menu():
 # --- 2. TABLO GÖRÜNÜMÜ (/teams/table) ---
 @app.route('/teams/table')
 def teams_table_page():
-    # Tüm verileri çekiyoruz (En güncel lig en üstte)
-    query = """
+    # 1. Filtre için URL'den gelen 'season' parametresini al
+    selected_season = request.args.get('season')
+
+    # 2. Dropdown için tüm benzersiz sezonları çek (Örn: bsl-2024, bsl-2023...)
+    seasons_query = "SELECT DISTINCT league FROM Teams ORDER BY league DESC"
+    try:
+        season_rows = db_api.query(seasons_query)
+        # Veriyi düz listeye çevir: ['bsl-2024-2025', 'bsl-2023-2024', ...]
+        all_seasons = [row[0] for row in season_rows if row[0]]
+    except Exception as e:
+        print(f"Sezon listesi hatası: {e}")
+        all_seasons = []
+
+    # 3. Takımları Çeken Ana Sorgu
+    base_query = """
         SELECT 
             team_id,
             staff_id,
@@ -396,17 +409,23 @@ def teams_table_page():
             saloon_capacity,
             saloon_address
         FROM Teams
-        ORDER BY league DESC, team_name ASC
     """
+    
+    # Eğer bir sezon seçildiyse WHERE ekle, seçilmediyse hepsini getir
+    if selected_season and selected_season != "all":
+        query = base_query + " WHERE league = %s ORDER BY team_name ASC"
+        params = (selected_season,)
+    else:
+        query = base_query + " ORDER BY league DESC, team_name ASC"
+        params = ()
 
     try:
-        # db_api.query senin sisteminde çalışıyor
-        rows = db_api.query(query)
+        rows = db_api.query(query, params)
     except Exception as e:
         print(f"Sorgu Hatası: {e}")
         rows = []
 
-    # Verileri HTML'e göndermek için sözlüğe çeviriyoruz
+    # 4. Verileri HTML'e göndermek için sözlüğe çevir
     teams = []
     for row in rows:
         teams.append({
@@ -422,8 +441,8 @@ def teams_table_page():
             "saloon_address": row[9]
         })
 
-    # teams.html dosyasını render ediyoruz
-    return render_template('teams.html', teams=teams)
+    # 5. HTML'e hem takımları, hem sezon listesini, hem de seçili sezonu gönderiyoruz
+    return render_template('teams.html', teams=teams, seasons=all_seasons, current_season=selected_season)
 
 
 # --- 3. EKLEME İŞLEMİ (/teams/add) ---
