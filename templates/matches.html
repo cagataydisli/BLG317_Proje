@@ -3,19 +3,31 @@
 {% block title %}Matches - BSL Database{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+<div class="container-fluid mt-4">
+    <!-- ==================== HEADER SECTION ==================== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2>🏀 Match List</h2>
-            <a href="/" class="btn btn-sm btn-outline-secondary">← Home</a>
+            <h2 class="mb-1">🏀 BSL Match Center</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="/">Home</a></li>
+                    <li class="breadcrumb-item active">Matches</li>
+                </ol>
+            </nav>
         </div>
         <div>
-            <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
-                ✏️ Edit Mode
-            </button>
-            <button id="addMatchBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addMatchModal">
-                + New Match
-            </button>
+            {% if current_user.is_authenticated %}
+                <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
+                    ✏️ Edit Mode
+                </button>
+                <button id="addMatchBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addMatchModal">
+                    + Add Match
+                </button>
+                <span class="badge bg-secondary ms-2">{{ current_user.username }}</span>
+                <a href="/logout" class="btn btn-sm btn-outline-danger ms-1">Logout</a>
+            {% else %}
+                <a href="/login" class="btn btn-primary">🔒 Login to Edit</a>
+            {% endif %}
         </div>
     </div>
 
@@ -31,215 +43,527 @@
         {% endif %}
     {% endwith %}
 
-    <!-- Analytics Section -->
-    {% if analytics %}
-    <div class="card mb-4">
-        <div class="card-header bg-info text-white">
-            <h5 class="mb-0">📊 City-Based Statistics</h5>
+    <!-- ==================== QUICK STATS DASHBOARD ==================== -->
+    {% if quick_stats %}
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3 col-lg">
+            <div class="card bg-primary text-white h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="mb-0">{{ quick_stats.total_matches }}</h3>
+                    <small>Total Matches</small>
+                </div>
+            </div>
         </div>
-        <div class="card-body">
+        <div class="col-6 col-md-3 col-lg">
+            <div class="card bg-success text-white h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="mb-0">{{ quick_stats.home_win_pct }}%</h3>
+                    <small>Home Win Rate</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+            <div class="card bg-danger text-white h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="mb-0">{{ quick_stats.away_wins }}</h3>
+                    <small>Away Wins</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+            <div class="card bg-info text-white h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="mb-0">{{ quick_stats.avg_total_score }}</h3>
+                    <small>Avg Points/Game</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3 col-lg">
+            <div class="card bg-warning text-dark h-100">
+                <div class="card-body text-center py-3">
+                    <h3 class="mb-0">{{ quick_stats.highest_score }}</h3>
+                    <small>Highest Score</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ==================== FILTER SECTION ==================== -->
+    <div class="card mb-4 shadow-sm border-0">
+        <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+            <div>
+                <strong>🔍 Filters</strong>
+                <span class="text-muted ms-2 small">{{ total_count }} results</span>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#filterPanel">
+                    <i class="bi bi-funnel"></i> Toggle
+                </button>
+            </div>
+        </div>
+        <div class="collapse show" id="filterPanel">
+            <div class="card-body">
+                <form method="get" id="filterForm">
+                    <div class="row g-2 mb-3">
+                        <!-- Team Search -->
+                        <div class="col-md-3">
+                            <input type="text" name="search_team" class="form-control" 
+                                   placeholder="🔎 Search team..." value="{{ search_team or '' }}">
+                        </div>
+                        <!-- League -->
+                        <div class="col-md-2">
+                            <select name="league" class="form-select">
+                                <option value="">All Leagues</option>
+                                {% for league in leagues %}
+                                <option value="{{ league }}" {% if selected_league == league %}selected{% endif %}>{{ league }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- City -->
+                        <div class="col-md-2">
+                            <select name="city" class="form-select">
+                                <option value="">All Cities</option>
+                                {% for city in cities %}
+                                <option value="{{ city }}" {% if selected_city == city %}selected{% endif %}>{{ city }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <!-- Date Range -->
+                        <div class="col-md-2">
+                            <input type="date" name="date_from" class="form-control" value="{{ date_from or '' }}" placeholder="From">
+                        </div>
+                        <div class="col-md-2">
+                            <input type="date" name="date_to" class="form-control" value="{{ date_to or '' }}" placeholder="To">
+                        </div>
+                        <div class="col-md-1">
+                            <input type="number" name="min_score_diff" class="form-control" placeholder="Diff" min="0" value="{{ min_score_diff or '' }}">
+                        </div>
+                    </div>
+
+                    <!-- Result Filter Radio Buttons -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-8">
+                            <div class="btn-group btn-group-sm flex-wrap" role="group">
+                                <input type="radio" class="btn-check" name="score_filter" id="sf_all" value="" {% if not score_filter %}checked{% endif %}>
+                                <label class="btn btn-outline-secondary" for="sf_all">All Results</label>
+
+                                <input type="radio" class="btn-check" name="score_filter" id="sf_home" value="home_wins" {% if score_filter == 'home_wins' %}checked{% endif %}>
+                                <label class="btn btn-outline-success" for="sf_home">🏠 Home Wins</label>
+
+                                <input type="radio" class="btn-check" name="score_filter" id="sf_away" value="away_wins" {% if score_filter == 'away_wins' %}checked{% endif %}>
+                                <label class="btn btn-outline-danger" for="sf_away">✈️ Away Wins</label>
+
+                                <input type="radio" class="btn-check" name="score_filter" id="sf_draw" value="draws" {% if score_filter == 'draws' %}checked{% endif %}>
+                                <label class="btn btn-outline-warning" for="sf_draw">🤝 Draws</label>
+
+                                <input type="radio" class="btn-check" name="score_filter" id="sf_high" value="high_scoring" {% if score_filter == 'high_scoring' %}checked{% endif %}>
+                                <label class="btn btn-outline-info" for="sf_high">🔥 High Scoring</label>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select name="per_page" class="form-select form-select-sm">
+                                <option value="25" {% if per_page == 25 %}selected{% endif %}>25 per page</option>
+                                <option value="50" {% if per_page == 50 %}selected{% endif %}>50 per page</option>
+                                <option value="100" {% if per_page == 100 %}selected{% endif %}>100 per page</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100">Apply Filters</button>
+                        </div>
+                    </div>
+
+                    <!-- Week Checkboxes (Collapsed) -->
+                    <details class="mb-2">
+                        <summary class="text-muted small" style="cursor: pointer;">📆 Filter by Week (click to expand)</summary>
+                        <div class="mt-2 p-2 bg-light rounded">
+                            <div class="row g-1">
+                                {% for week in all_weeks[:24] %}
+                                <div class="col-auto">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="checkbox" name="weeks" value="{{ week }}" id="week_{{ loop.index }}" {% if week in selected_weeks %}checked{% endif %}>
+                                        <label class="form-check-label small" for="week_{{ loop.index }}">{{ week }}</label>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </details>
+                    
+                    <input type="hidden" name="sort" value="{{ request.args.get('sort', 'match_date') }}">
+                    <input type="hidden" name="order" value="{{ request.args.get('order', 'desc') }}">
+                </form>
+                
+                {% if search_team or selected_league or selected_city or date_from or score_filter or selected_weeks %}
+                <div class="mt-2">
+                    <a href="/matches" class="btn btn-sm btn-outline-secondary">✕ Clear All Filters</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MATCHES TABLE ==================== -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-sm table-hover">
+                <table class="table table-hover align-middle mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>City</th>
-                            <th>Total Matches</th>
-                            <th>Avg Total Points</th>
-                            <th>Highest Scoring Game</th>
-                            <th>Home Wins</th>
-                            <th>Home Win %</th>
+                            <th style="width: 100px;">Date</th>
+                            <th class="text-end" style="width: 25%;">Home</th>
+                            <th class="text-center" style="width: 100px;">Score</th>
+                            <th style="width: 25%;">Away</th>
+                            <th>League</th>
+                            <th>Venue</th>
+                            <th class="edit-col d-none text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for stat in analytics %}
+                        {% for match in matches %}
+                        <tr id="row-{{ match.match_id }}" class="match-row">
+                            <td>
+                                <div class="fw-semibold">{{ match.match_date }}</div>
+                                <small class="text-muted">{{ match.match_hour or '' }}</small>
+                            </td>
+                            <td class="text-end">
+                                <span class="{% if match.home_score and match.away_score and match.home_score > match.away_score %}fw-bold text-success{% endif %}">
+                                    {{ match.home_team }}
+                                </span>
+                                {% if match.home_score and match.away_score and match.home_score > match.away_score %}
+                                    <span class="badge bg-success ms-1">W</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if match.home_score is not none and match.away_score is not none %}
+                                    <div class="score-box d-inline-flex align-items-center justify-content-center px-3 py-1 rounded {% if match.home_score > match.away_score %}bg-success-subtle{% elif match.home_score < match.away_score %}bg-danger-subtle{% else %}bg-warning-subtle{% endif %}">
+                                        <span class="fw-bold fs-5">{{ match.home_score }}</span>
+                                        <span class="text-muted mx-2">-</span>
+                                        <span class="fw-bold fs-5">{{ match.away_score }}</span>
+                                    </div>
+                                {% else %}
+                                    <span class="badge bg-secondary">TBD</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if match.home_score and match.away_score and match.home_score < match.away_score %}
+                                    <span class="badge bg-success me-1">W</span>
+                                {% endif %}
+                                <span class="{% if match.home_score and match.away_score and match.home_score < match.away_score %}fw-bold text-success{% endif %}">
+                                    {{ match.away_team }}
+                                </span>
+                            </td>
+                            <td><span class="badge bg-primary bg-opacity-75">{{ match.league }}</span></td>
+                            <td>
+                                <small>{{ match.match_city }}</small>
+                                {% if match.match_saloon %}<br><small class="text-muted">{{ match.match_saloon }}</small>{% endif %}
+                            </td>
+                            <td class="edit-col d-none text-center">
+                                <button class="btn btn-sm btn-outline-warning" onclick="editMatch('{{ match.match_id }}', {{ match.home_team_id }}, {{ match.away_team_id }}, '{{ match.match_date }}', '{{ match.match_hour }}', {{ match.home_score if match.home_score is not none else 'null' }}, {{ match.away_score if match.away_score is not none else 'null' }}, '{{ match.match_week }}', '{{ match.league }}', '{{ match.match_city }}', '{{ match.match_saloon }}')">✏️</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteMatch('{{ match.match_id }}')">🗑️</button>
+                            </td>
+                        </tr>
+                        {% else %}
                         <tr>
-                            <td><strong>{{ stat.city }}</strong></td>
-                            <td>{{ stat.total_matches }}</td>
-                            <td>{{ stat.avg_total_points }}</td>
-                            <td><span class="badge bg-warning text-dark">{{ stat.highest_scoring_game }}</span></td>
-                            <td>{{ stat.home_wins }}</td>
-                            <td>{{ "%.1f"|format((stat.home_wins / stat.total_matches * 100)) }}%</td>
+                            <td colspan="7" class="text-center py-5">
+                                <div class="text-muted">
+                                    <h5>No matches found</h5>
+                                    <p>Try adjusting your filters</p>
+                                    <a href="/matches" class="btn btn-outline-primary">Clear Filters</a>
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <small class="text-muted">
-                * Cities with at least 5 matches played, sorted by average total points.
-            </small>
         </div>
     </div>
+
+    <!-- ==================== PAGINATION ==================== -->
+    {% if total_pages > 1 %}
+    <nav class="d-flex justify-content-between align-items-center mb-5">
+        <div class="text-muted small">
+            Showing {{ ((current_page - 1) * per_page) + 1 }}-{{ [current_page * per_page, total_count]|min }} of {{ total_count }}
+        </div>
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
+                <a class="page-link" href="?page={{ current_page - 1 }}{% for key, value in request.args.items() if key != 'page' %}&{{ key }}={{ value }}{% endfor %}">‹</a>
+            </li>
+            {% for p in range([1, current_page - 2]|max, [total_pages, current_page + 2]|min + 1) %}
+                <li class="page-item {% if p == current_page %}active{% endif %}">
+                    <a class="page-link" href="?page={{ p }}{% for key, value in request.args.items() if key != 'page' %}&{{ key }}={{ value }}{% endfor %}">{{ p }}</a>
+                </li>
+            {% endfor %}
+            <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
+                <a class="page-link" href="?page={{ current_page + 1 }}{% for key, value in request.args.items() if key != 'page' %}&{{ key }}={{ value }}{% endfor %}">›</a>
+            </li>
+        </ul>
+    </nav>
     {% endif %}
 
-    <!-- Filter Section -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <form method="get" class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Sort By:</label>
-                    <select name="sort" class="form-select">
-                        <option value="match_date">Date</option>
-                        <option value="match_week">Week</option>
-                        <option value="match_city">City</option>
-                        <option value="league">League</option>
-                    </select>
+    <!-- ==================== ANALYTICS SECTION ==================== -->
+    <div class="row">
+        <!-- Team Performance Rankings -->
+        {% if analytics %}
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🏀 Team Performance Rankings <small class="text-muted">({{ analytics_display_season }})</small></h6>
+                    <span class="badge bg-secondary">{{ analytics|length }} teams</span>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">Order:</label>
-                    <select name="order" class="form-select">
-                        <option value="desc">Descending</option>
-                        <option value="asc">Ascending</option>
-                    </select>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Team</th>
+                                    <th class="text-center">W-L</th>
+                                    <th>Win%</th>
+                                    <th>+/-</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in analytics %}
+                                <tr class="{% if loop.index <= 3 %}table-success{% elif loop.index > analytics|length - 3 %}table-danger{% endif %}">
+                                    <td>
+                                        {% if loop.index == 1 %}🥇
+                                        {% elif loop.index == 2 %}🥈
+                                        {% elif loop.index == 3 %}🥉
+                                        {% else %}<span class="badge bg-secondary">{{ loop.index }}</span>{% endif %}
+                                    </td>
+                                    <td class="fw-semibold">{{ stat.team_name }}</td>
+                                    <td class="text-center">
+                                        <span class="text-success">{{ stat.wins }}</span>-<span class="text-danger">{{ stat.losses }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 18px; min-width: 50px;">
+                                            <div class="progress-bar {% if stat.win_pct >= 60 %}bg-success{% elif stat.win_pct >= 40 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {{ stat.win_pct }}%">
+                                                {{ stat.win_pct }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if stat.point_diff > 0 %}<span class="text-success">+{{ stat.point_diff }}</span>
+                                        {% elif stat.point_diff < 0 %}<span class="text-danger">{{ stat.point_diff }}</span>
+                                        {% else %}<span class="text-muted">0</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">Limit:</label>
-                    <input type="number" name="limit" value="100" min="1" max="10000" class="form-control">
+                <div class="card-footer bg-white text-muted small">
+                    🟢 Top 3 | 🔴 Bottom 3 | Use season filter to change
                 </div>
-                <div class="col-md-2">
-                    <label class="form-label">&nbsp;</label>
-                    <button type="submit" class="btn btn-primary w-100">Apply</button>
-                </div>
-            </form>
+            </div>
         </div>
+        {% endif %}
+
+        <!-- Recent High Scoring Games -->
+        {% if nested_data %}
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🔥 High Scoring Games</h6>
+                    <span class="badge bg-warning text-dark">{{ nested_data|length }} games</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Home</th>
+                                    <th class="text-center">Score</th>
+                                    <th>Away</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in nested_data %}
+                                <tr>
+                                    <td class="fw-semibold">{{ row.home_team }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ row.home_score }}</span>
+                                        <span class="text-muted">-</span>
+                                        <span class="badge bg-secondary">{{ row.away_score }}</span>
+                                    </td>
+                                    <td>{{ row.away_team }}</td>
+                                    <td><small class="text-muted">{{ row.match_date }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-muted small">
+                    Home teams with exceptional offensive performance
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
-    <h5>Total Matches: <span class="badge bg-secondary">{{ matches|length }}</span></h5>
-
-    <!-- Matches Table -->
-    <div class="table-responsive">
-        <table class="table table-striped table-hover align-middle">
-            <thead class="table-dark">
-                <tr>
-                    <th>Match ID</th>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Home Team</th>
-                    <th>Score</th>
-                    <th>Away Team</th>
-                    <th>League</th>
-                    <th>Week</th>
-                    <th>City</th>
-                    <th>Arena</th>
-                    <th class="edit-col d-none">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for match in matches %}
-                <tr id="row-{{ match.match_id }}">
-                    <td><small>{{ match.match_id }}</small></td>
-                    <td>{{ match.match_date }}</td>
-                    <td>{{ match.match_hour }}</td>
-                    <td>{{ match.home_team }}</td>
-                    <td class="text-center">
-                        {% if match.home_score is not none and match.away_score is not none %}
-                            <span class="badge {% if match.home_score > match.away_score %}bg-success{% elif match.home_score < match.away_score %}bg-secondary{% else %}bg-warning text-dark{% endif %}">
-                                {{ match.home_score }} - {{ match.away_score }}
+    <!-- Second Row of Analytics -->
+    <div class="row">
+        <!-- Recent Wins -->
+        {% if set_operation_data %}
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🏅 Recent Wins</h6>
+                    <span class="badge bg-info">{{ set_operation_data|length }} wins</span>
+                </div>
+                <div class="card-body p-0" style="max-height: 350px; overflow-y: auto;">
+                    <ul class="list-group list-group-flush">
+                        {% for row in set_operation_data %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                            <span>{{ row.team_name }}</span>
+                            <span>
+                                {% if row.win_type == 'Home Win' %}
+                                    <span class="badge bg-success">🏠 Home</span>
+                                {% else %}
+                                    <span class="badge bg-primary">✈️ Away</span>
+                                {% endif %}
+                                <small class="text-muted ms-2">{{ row.match_date }}</small>
                             </span>
-                        {% else %}
-                            <span class="text-muted">-</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ match.away_team }}</td>
-                    <td><small>{{ match.league }}</small></td>
-                    <td>{{ match.match_week }}</td>
-                    <td>{{ match.match_city }}</td>
-                    <td><small>{{ match.match_saloon }}</small></td>
-                    <td class="edit-col d-none">
-                        <button class="btn btn-sm btn-warning" onclick="editMatch('{{ match.match_id }}', {{ match.home_team_id }}, {{ match.away_team_id }}, '{{ match.match_date }}', '{{ match.match_hour }}', {{ match.home_score or 'null' }}, {{ match.away_score or 'null' }}, '{{ match.match_week }}', '{{ match.league }}', '{{ match.match_city }}', '{{ match.match_saloon }}')">
-                            ✏️
-                        </button>
-                        <button class="btn btn-sm btn-danger" onclick="deleteMatch('{{ match.match_id }}')">
-                            🗑️
-                        </button>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="11" class="text-center">No matches found.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div class="card-footer bg-white text-muted small">
+                    Latest victories at home and on the road
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Head to Head -->
+        {% if h2h_data %}
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🥊 Head-to-Head Rivalries</h6>
+                    <span class="badge bg-danger">{{ h2h_data|length }} matchups</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Matchup</th>
+                                    <th class="text-center">Games</th>
+                                    <th class="text-center">Record</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in h2h_data %}
+                                <tr>
+                                    <td>
+                                        <span class="fw-semibold">{{ row.team1 }}</span>
+                                        <span class="text-muted mx-1">vs</span>
+                                        <span>{{ row.team2 }}</span>
+                                    </td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{ row.total_games }}</span></td>
+                                    <td class="text-center">
+                                        <span class="text-success fw-bold">{{ row.team1_wins }}</span>
+                                        <span class="text-muted">-</span>
+                                        <span class="text-danger fw-bold">{{ row.team2_wins }}</span>
+                                        {% if row.draws > 0 %}<span class="text-warning">-{{ row.draws }}</span>{% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-muted small">
+                    Frequent opponents with 2+ meetings
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 
-<!-- Add Match Modal -->
+<!-- ==================== ADD MATCH MODAL ==================== -->
 <div class="modal fade" id="addMatchModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
-                <h5 class="modal-title">Add New Match</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title">➕ Add New Match</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form action="/matches/add" method="POST">
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Match ID (Required):</label>
+                            <label class="form-label">Match ID <span class="text-danger">*</span></label>
                             <input type="text" name="match_id" class="form-control" required placeholder="e.g., M12345">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">League:</label>
-                            <input type="text" name="league" class="form-control" placeholder="bsl-2024-2025">
+                            <label class="form-label">League</label>
+                            <select name="league" class="form-select">
+                                <option value="">Select League</option>
+                                {% for league in leagues %}<option value="{{ league }}">{{ league }}</option>{% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Home Team:</label>
+                            <label class="form-label">🏠 Home Team <span class="text-danger">*</span></label>
                             <select name="home_team_id" class="form-select" required>
-                                <option value="">-- Select Team --</option>
-                                {% for team in teams %}
-                                <option value="{{ team.team_id }}">{{ team.team_name }}</option>
-                                {% endfor %}
+                                <option value="">Select Home Team</option>
+                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Away Team:</label>
+                            <label class="form-label">✈️ Away Team <span class="text-danger">*</span></label>
                             <select name="away_team_id" class="form-select" required>
-                                <option value="">-- Select Team --</option>
-                                {% for team in teams %}
-                                <option value="{{ team.team_id }}">{{ team.team_name }}</option>
-                                {% endfor %}
+                                <option value="">Select Away Team</option>
+                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
                             </select>
                         </div>
                     </div>
                     <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Match Date:</label>
+                        <div class="col-md-4">
+                            <label class="form-label">Date</label>
                             <input type="date" name="match_date" class="form-control">
                         </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Match Time:</label>
+                        <div class="col-md-4">
+                            <label class="form-label">Time</label>
                             <input type="time" name="match_hour" class="form-control">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Week</label>
+                            <input type="text" name="match_week" class="form-control" placeholder="NS 01">
                         </div>
                     </div>
                     <div class="row mb-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Week:</label>
-                            <input type="text" name="match_week" class="form-control" placeholder="Week 1">
+                        <div class="col-md-6">
+                            <label class="form-label">City</label>
+                            <input type="text" name="match_city" class="form-control" placeholder="İSTANBUL">
                         </div>
-                        <div class="col-md-4">
-                            <label class="form-label">City:</label>
-                            <input type="text" name="match_city" class="form-control">
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Arena:</label>
+                        <div class="col-md-6">
+                            <label class="form-label">Arena</label>
                             <input type="text" name="match_saloon" class="form-control">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-success w-100">Add Match</button>
+                    <button type="submit" class="btn btn-success w-100">✅ Add Match</button>
                 </form>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Edit Match Modal -->
+<!-- ==================== EDIT MATCH MODAL ==================== -->
 <div class="modal fade" id="editMatchModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-warning">
-                <h5 class="modal-title">Edit Match</h5>
+                <h5 class="modal-title">✏️ Edit Match</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -247,93 +571,98 @@
                     <input type="hidden" name="match_id" id="edit_match_id">
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Match ID:</label>
-                            <input type="text" id="edit_match_id_display" class="form-control" disabled>
+                            <label class="form-label">Match ID</label>
+                            <input type="text" id="edit_match_id_display" class="form-control bg-light" disabled>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">League:</label>
+                            <label class="form-label">League</label>
                             <input type="text" name="league" id="edit_league" class="form-control">
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Home Team:</label>
+                            <label class="form-label">🏠 Home Team</label>
                             <select name="home_team_id" id="edit_home_team_id" class="form-select" required>
-                                {% for team in teams %}
-                                <option value="{{ team.team_id }}">{{ team.team_name }}</option>
-                                {% endfor %}
+                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label fw-bold">Away Team:</label>
+                            <label class="form-label">✈️ Away Team</label>
                             <select name="away_team_id" id="edit_away_team_id" class="form-select" required>
-                                {% for team in teams %}
-                                <option value="{{ team.team_id }}">{{ team.team_name }}</option>
-                                {% endfor %}
+                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
                             </select>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <label class="form-label">Home Score:</label>
-                            <input type="number" name="home_score" id="edit_home_score" class="form-control" min="0">
+                            <label class="form-label text-success fw-bold">Home Score</label>
+                            <input type="number" name="home_score" id="edit_home_score" class="form-control border-success" min="0">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Away Score:</label>
-                            <input type="number" name="away_score" id="edit_away_score" class="form-control" min="0">
+                            <label class="form-label text-danger fw-bold">Away Score</label>
+                            <input type="number" name="away_score" id="edit_away_score" class="form-control border-danger" min="0">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Week:</label>
+                            <label class="form-label">Week</label>
                             <input type="text" name="match_week" id="edit_match_week" class="form-control">
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Match Date:</label>
+                            <label class="form-label">Date</label>
                             <input type="date" name="match_date" id="edit_match_date" class="form-control">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Match Time:</label>
+                            <label class="form-label">Time</label>
                             <input type="time" name="match_hour" id="edit_match_hour" class="form-control">
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">City:</label>
+                            <label class="form-label">City</label>
                             <input type="text" name="match_city" id="edit_match_city" class="form-control">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Arena:</label>
+                            <label class="form-label">Arena</label>
                             <input type="text" name="match_saloon" id="edit_match_saloon" class="form-control">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-warning w-100">Update</button>
+                    <button type="submit" class="btn btn-warning w-100">💾 Save Changes</button>
                 </form>
             </div>
         </div>
     </div>
 </div>
 
+<style>
+    .match-row:hover {
+        background-color: #f8f9fa !important;
+    }
+    .score-box {
+        min-width: 90px;
+        white-space: nowrap;
+    }
+    .bg-success-subtle { background-color: #d1e7dd !important; }
+    .bg-danger-subtle { background-color: #f8d7da !important; }
+    .bg-warning-subtle { background-color: #fff3cd !important; }
+</style>
+
 <script>
-    // Toggle Edit Mode
     function toggleEditMode() {
         const editCols = document.querySelectorAll('.edit-col');
         const addBtn = document.getElementById('addMatchBtn');
         const editBtn = document.getElementById('toggleEditMode');
-
         editCols.forEach(col => col.classList.toggle('d-none'));
         addBtn.classList.toggle('d-none');
-
         if (addBtn.classList.contains('d-none')) {
-            editBtn.innerText = "✏️ Edit Mode";
-            editBtn.classList.replace("btn-secondary", "btn-outline-primary");
+            editBtn.innerHTML = "✏️ Edit Mode";
+            editBtn.className = "btn btn-outline-primary";
         } else {
-            editBtn.innerText = "❌ Close Mode";
-            editBtn.classList.replace("btn-outline-primary", "btn-secondary");
+            editBtn.innerHTML = "✕ Exit Edit";
+            editBtn.className = "btn btn-secondary";
         }
     }
 
-    // Edit Match - Populate Modal
     function editMatch(matchId, homeTeamId, awayTeamId, matchDate, matchHour, homeScore, awayScore, matchWeek, league, matchCity, matchSaloon) {
         document.getElementById('edit_match_id').value = matchId;
         document.getElementById('edit_match_id_display').value = matchId;
@@ -347,26 +676,20 @@
         document.getElementById('edit_league').value = league;
         document.getElementById('edit_match_city').value = matchCity;
         document.getElementById('edit_match_saloon').value = matchSaloon;
-
-        const modal = new bootstrap.Modal(document.getElementById('editMatchModal'));
-        modal.show();
+        new bootstrap.Modal(document.getElementById('editMatchModal')).show();
     }
 
-    // Delete Match
     function deleteMatch(matchId) {
-        if(!confirm("Are you sure you want to delete this match?")) return;
-
+        if(!confirm("Delete match " + matchId + "?")) return;
         fetch('/matches/delete/' + matchId, { method: 'POST' })
-        .then(response => response.json())
+        .then(r => r.json())
         .then(data => {
             if (data.success) {
                 document.getElementById('row-' + matchId).remove();
-                alert("Match successfully deleted.");
             } else {
-                alert("Could not delete: " + data.error);
+                alert("Error: " + data.error);
             }
-        })
-        .catch(err => alert("Error: " + err));
+        });
     }
 </script>
 {% endblock %}

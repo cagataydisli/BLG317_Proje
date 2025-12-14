@@ -4,6 +4,16 @@
 DROP TABLE IF EXISTS technic_roster CASCADE;
 DROP TABLE IF EXISTS Matches CASCADE;
 DROP TABLE IF EXISTS Teams CASCADE;
+DROP TABLE IF EXISTS Users CASCADE;
+
+-- =========================
+-- 0) Users Table (Authentication)
+-- =========================
+CREATE TABLE Users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) UNIQUE NOT NULL,
+    password_hash VARCHAR(256) NOT NULL
+);
 
 -- =========================
 -- 1) Teams Table (Referans Tablosu)

@@ -505,38 +505,143 @@ def delete_team(team_id):
         return jsonify({'success': False, 'error': str(e)})
 
 
-# 3. Maçlar (Celil Aslan)
+# =====================================================================
+# 3. MATCHES MODULE (Celil Aslan - 150210703)
+# =====================================================================
+# This module demonstrates:
+# - Full CRUD operations (Create, Read, Update, Delete)
+# - Complex 4+ table JOINs
+# - Nested Subqueries
+# - LEFT/RIGHT OUTER JOINs  
+# - Set Operations (UNION, INTERSECT, EXCEPT)
+# - Aggregations with GROUP BY and HAVING
+# - Advanced filtering and pagination
+# =====================================================================
+
 @app.route('/matches')
 def matches_page():
-    # Filtreleme parametreleri
+    """
+    Main matches listing page with advanced filtering, pagination, and analytics.
+    Demonstrates: Multi-table JOINs, Aggregations, Subqueries
+    """
+    # ==================== FILTER PARAMETERS ====================
     sort_by = request.args.get('sort', 'match_date')
     order = request.args.get('order', 'desc')
-    limit = request.args.get('limit', '100')
     fmt = request.args.get('format', 'html')
     
-    # SQL injection koruması
-    allowed_cols = ['match_date', 'match_week', 'league', 'match_city']
+    # Pagination parameters
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', 50))
+    except ValueError:
+        page, per_page = 1, 50
+    
+    # Advanced filter parameters
+    search_team = request.args.get('search_team', '').strip()
+    selected_league = request.args.get('league', '')
+    selected_city = request.args.get('city', '')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    score_filter = request.args.get('score_filter', '')  # home_wins, away_wins, draws, high_scoring
+    min_score_diff = request.args.get('min_score_diff', '')
+    selected_weeks = request.args.getlist('weeks')  # Checkbox multi-select
+    
+    # SQL injection protection
+    allowed_cols = ['match_date', 'match_week', 'league', 'match_city', 'home_score', 'away_score']
     if sort_by not in allowed_cols:
         sort_by = 'match_date'
+    order = 'desc' if order not in ['asc', 'desc'] else order
     
-    if order not in ['asc', 'desc']:
-        order = 'desc'
-    
-    try:
-        limit = int(limit)
-        if limit < 1 or limit > 10000:
-            limit = 100
-    except:
-        limit = 100
-    
-    # Fetch all teams for dropdown menus
-    teams_query = "SELECT team_id, team_name FROM Teams ORDER BY team_name"
+    # ==================== DROPDOWN DATA ====================
+    # Fetch teams for dropdowns
+    teams_query = "SELECT DISTINCT team_id, team_name FROM Teams ORDER BY team_name"
     teams_rows = db_api.query(teams_query)
     teams = [{'team_id': row[0], 'team_name': row[1]} for row in teams_rows]
     
-    # Maç verilerini çekerken Ev Sahibi ve Deplasman takımlarının isimlerini getirmek için
-    # teams tablosuna İKİ KEZ join yapıyoruz (t1: home, t2: away)
-    query = f"""
+    # Fetch unique leagues for filter
+    leagues_query = "SELECT DISTINCT league FROM Matches WHERE league IS NOT NULL ORDER BY league DESC"
+    leagues = [row[0] for row in db_api.query(leagues_query)]
+    
+    # Fetch unique cities for filter
+    cities_query = "SELECT DISTINCT match_city FROM Matches WHERE match_city IS NOT NULL ORDER BY match_city"
+    cities = [row[0] for row in db_api.query(cities_query)]
+    
+    # Fetch unique weeks for checkbox filter
+    weeks_query = "SELECT DISTINCT match_week FROM Matches WHERE match_week IS NOT NULL ORDER BY match_week"
+    all_weeks = [row[0] for row in db_api.query(weeks_query)]
+    
+    # ==================== DYNAMIC WHERE CLAUSE ====================
+    where_clauses = ["1=1"]
+    params = []
+    
+    # Team name search (searches both home and away teams)
+    if search_team:
+        where_clauses.append("(t1.team_name ILIKE %s OR t2.team_name ILIKE %s)")
+        params.extend([f"%{search_team}%", f"%{search_team}%"])
+    
+    # League filter
+    if selected_league:
+        where_clauses.append("m.league = %s")
+        params.append(selected_league)
+    
+    # City filter
+    if selected_city:
+        where_clauses.append("m.match_city = %s")
+        params.append(selected_city)
+    
+    # Date range filter
+    if date_from:
+        where_clauses.append("m.match_date >= %s")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("m.match_date <= %s")
+        params.append(date_to)
+    
+    # Score filter (radio button)
+    if score_filter == 'home_wins':
+        where_clauses.append("m.home_score > m.away_score")
+    elif score_filter == 'away_wins':
+        where_clauses.append("m.home_score < m.away_score")
+    elif score_filter == 'draws':
+        where_clauses.append("m.home_score = m.away_score")
+    elif score_filter == 'high_scoring':
+        where_clauses.append("(m.home_score + m.away_score) >= 180")
+    
+    # Minimum score difference
+    if min_score_diff:
+        try:
+            diff = int(min_score_diff)
+            where_clauses.append("ABS(m.home_score - m.away_score) >= %s")
+            params.append(diff)
+        except ValueError:
+            pass
+    
+    # Week multi-select (checkboxes)
+    if selected_weeks:
+        placeholders = ', '.join(['%s'] * len(selected_weeks))
+        where_clauses.append(f"m.match_week IN ({placeholders})")
+        params.extend(selected_weeks)
+    
+    where_sql = " AND ".join(where_clauses)
+    
+    # ==================== COUNT QUERY FOR PAGINATION ====================
+    count_query = f"""
+        SELECT COUNT(*) FROM matches m
+        JOIN teams t1 ON m.home_team_id = t1.team_id
+        JOIN teams t2 ON m.away_team_id = t2.team_id
+        WHERE {where_sql}
+    """
+    total_count = db_api.query(count_query, tuple(params))[0][0]
+    total_pages = math.ceil(total_count / per_page) if total_count > 0 else 1
+    
+    # Ensure valid page number
+    if page < 1: page = 1
+    if page > total_pages: page = total_pages
+    
+    offset = (page - 1) * per_page
+    
+    # ==================== MAIN QUERY (2-Table JOIN) ====================
+    main_query = f"""
         SELECT 
             m.match_id,
             m.match_date, 
@@ -554,48 +659,414 @@ def matches_page():
         FROM matches m
         JOIN teams t1 ON m.home_team_id = t1.team_id
         JOIN teams t2 ON m.away_team_id = t2.team_id
+        WHERE {where_sql}
         ORDER BY m.{sort_by} {order}, m.match_hour ASC
-        LIMIT {limit}
+        LIMIT %s OFFSET %s
     """
-    rows = db_api.query(query)
+    query_params = tuple(params) + (per_page, offset)
+    rows = db_api.query(main_query, query_params)
     
     cols = ['match_id', 'match_date', 'match_hour', 'home_team', 'home_score', 
             'away_score', 'away_team', 'match_saloon', 'league', 'match_week',
             'match_city', 'home_team_id', 'away_team_id']
-    
     matches = [dict(zip(cols, row)) for row in rows]
     
-    # Complex Query: Analytics Statistics
+    # ==================== COMPLEX QUERY 1: Team Performance (GROUP BY + HAVING + Aggregations) ====================
+    # Real-world meaningful stat: Team performance summary with wins, losses, averages
+    # Use the selected league filter, or default to current season
+    analytics_league = selected_league if selected_league else 'bsl-2024-2025'
+    analytics_display_season = analytics_league.replace('bsl-', '').upper() if analytics_league else 'All Seasons'
+    
     analytics_query = """
+        WITH ranked_matches AS (
+            -- Each match appears twice in data with swapped home/away teams
+            -- Keep only the first one (lower match_id) per date + score combination
+            SELECT 
+                m.match_id,
+                m.match_date,
+                m.home_score, 
+                m.away_score, 
+                m.home_team_id, 
+                m.away_team_id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY m.match_date, 
+                                 LEAST(m.home_score, m.away_score), 
+                                 GREATEST(m.home_score, m.away_score)
+                    ORDER BY m.match_id
+                ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT match_id, match_date, home_score, away_score, home_team_id, away_team_id
+            FROM ranked_matches
+            WHERE rn = 1
+        ),
+        match_results AS (
+            -- Home team results
+            SELECT 
+                t.team_name,
+                um.match_id,
+                um.home_score AS scored, 
+                um.away_score AS conceded,
+                CASE WHEN um.home_score > um.away_score THEN 1 ELSE 0 END AS won,
+                CASE WHEN um.home_score < um.away_score THEN 1 ELSE 0 END AS lost
+            FROM unique_matches um
+            JOIN Teams t ON um.home_team_id = t.team_id
+            UNION ALL
+            -- Away team results  
+            SELECT 
+                t.team_name,
+                um.match_id,
+                um.away_score AS scored, 
+                um.home_score AS conceded,
+                CASE WHEN um.away_score > um.home_score THEN 1 ELSE 0 END AS won,
+                CASE WHEN um.away_score < um.home_score THEN 1 ELSE 0 END AS lost
+            FROM unique_matches um
+            JOIN Teams t ON um.away_team_id = t.team_id
+        ),
+        team_stats AS (
+            SELECT 
+                team_name,
+                COUNT(*) as games_played,
+                SUM(won) as wins,
+                SUM(lost) as losses,
+                ROUND(AVG(scored)::numeric, 1) as avg_points_scored,
+                ROUND(AVG(conceded)::numeric, 1) as avg_points_conceded
+            FROM match_results
+            GROUP BY team_name
+            HAVING COUNT(*) >= 3
+        )
         SELECT 
-            m.match_city,
-            COUNT(*) as total_matches,
-            ROUND(AVG(m.home_score + m.away_score), 2) as avg_total_points,
-            MAX(m.home_score + m.away_score) as highest_scoring_game,
-            COUNT(CASE WHEN m.home_score > m.away_score THEN 1 END) as home_wins
-        FROM Matches m
-        WHERE m.home_score IS NOT NULL AND m.away_score IS NOT NULL
-        GROUP BY m.match_city
-        HAVING COUNT(*) >= 5
-        ORDER BY avg_total_points DESC
-        LIMIT 10
+            team_name,
+            games_played,
+            wins,
+            losses,
+            ROUND((wins * 100.0 / games_played)::numeric, 1) as win_pct,
+            avg_points_scored,
+            avg_points_conceded,
+            ROUND((avg_points_scored - avg_points_conceded)::numeric, 1) as point_diff
+        FROM team_stats
+        ORDER BY win_pct DESC, point_diff DESC
     """
-    analytics_rows = db_api.query(analytics_query)
+    analytics_rows = db_api.query(analytics_query, (analytics_league,))
     analytics = [{
-        'city': row[0],
-        'total_matches': row[1],
-        'avg_total_points': row[2],
-        'highest_scoring_game': row[3],
-        'home_wins': row[4]
+        'team_name': row[0],
+        'games_played': row[1],
+        'wins': row[2],
+        'losses': row[3],
+        'win_pct': float(row[4]) if row[4] else 0,
+        'avg_points_scored': float(row[5]) if row[5] else 0,
+        'avg_points_conceded': float(row[6]) if row[6] else 0,
+        'point_diff': float(row[7]) if row[7] else 0
     } for row in analytics_rows]
     
-    if fmt == 'json':
-        return jsonify(matches)
+    # ==================== COMPLEX QUERY 2: 4+ Table JOIN ====================
+    # Joins: Matches + Teams(home) + Teams(away) + Standings(home) + Standings(away)
+    # Shows matches with team standings info
+    complex_join_query = """
+        SELECT 
+            m.match_id,
+            t1.team_name AS home_team,
+            t2.team_name AS away_team,
+            m.home_score,
+            m.away_score,
+            COALESCE(s1.team_rank, 0) AS home_team_rank,
+            COALESCE(s2.team_rank, 0) AS away_team_rank,
+            COALESCE(s1.team_wins, 0) AS home_team_wins,
+            COALESCE(s2.team_wins, 0) AS away_team_wins,
+            m.league
+        FROM Matches m
+        INNER JOIN Teams t1 ON m.home_team_id = t1.team_id
+        INNER JOIN Teams t2 ON m.away_team_id = t2.team_id
+        LEFT OUTER JOIN Standings s1 ON t1.team_name = s1.team_name AND m.league = s1.league
+        LEFT OUTER JOIN Standings s2 ON t2.team_name = s2.team_name AND m.league = s2.league
+        WHERE m.home_score IS NOT NULL 
+          AND m.away_score IS NOT NULL
+          AND m.league = %s
+        ORDER BY m.match_date DESC
+        LIMIT 10
+    """
+    try:
+        complex_join_rows = db_api.query(complex_join_query, (analytics_league,))
+        complex_join_data = [{
+            'match_id': row[0],
+            'home_team': row[1],
+            'away_team': row[2],
+            'home_score': row[3],
+            'away_score': row[4],
+            'home_rank': row[5],
+            'away_rank': row[6],
+            'home_wins': row[7],
+            'away_wins': row[8],
+            'league': row[9]
+        } for row in complex_join_rows]
+    except Exception as e:
+        print(f"Complex join error: {e}")
+        complex_join_data = []
     
-    return render_template('matches.html', matches=matches, teams=teams, analytics=analytics)
+    # ==================== COMPLEX QUERY 3: NESTED SUBQUERY ====================
+    # Find matches where home team scored above league average
+    nested_subquery = """
+        WITH ranked_matches AS (
+            SELECT m.*, 
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
+        ),
+        league_avg AS (
+            SELECT AVG(home_score) as avg_score FROM unique_matches
+        )
+        SELECT 
+            m.match_id,
+            t1.team_name AS home_team,
+            t2.team_name AS away_team,
+            m.home_score,
+            m.away_score,
+            m.match_date
+        FROM unique_matches m
+        JOIN Teams t1 ON m.home_team_id = t1.team_id
+        JOIN Teams t2 ON m.away_team_id = t2.team_id
+        CROSS JOIN league_avg la
+        WHERE m.home_score > la.avg_score
+        ORDER BY m.home_score DESC
+        LIMIT 20
+    """
+    try:
+        nested_rows = db_api.query(nested_subquery, (analytics_league,))
+        nested_data = [{
+            'match_id': row[0],
+            'home_team': row[1],
+            'away_team': row[2],
+            'home_score': row[3],
+            'away_score': row[4],
+            'match_date': row[5]
+        } for row in nested_rows]
+    except Exception as e:
+        print(f"Nested subquery error: {e}")
+        nested_data = []
+    
+    # ==================== COMPLEX QUERY 4: LEFT OUTER JOIN ====================
+    # Shows teams participation statistics - demonstrates OUTER JOIN
+    # Some teams may have registered but not played all their matches
+    outer_join_query = """
+        WITH ranked_matches AS (
+            SELECT m.*, 
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
+        ),
+        league_teams AS (
+            SELECT DISTINCT home_team_id AS team_id FROM unique_matches
+            UNION
+            SELECT DISTINCT away_team_id AS team_id FROM unique_matches
+        )
+        SELECT 
+            t.team_id,
+            t.team_name,
+            %s as league,
+            COUNT(m.match_id) AS total_matches,
+            COALESCE(SUM(CASE WHEN m.home_team_id = t.team_id AND m.home_score > m.away_score THEN 1
+                              WHEN m.away_team_id = t.team_id AND m.away_score > m.home_score THEN 1
+                              ELSE 0 END), 0) AS wins
+        FROM Teams t
+        INNER JOIN league_teams lt ON t.team_id = lt.team_id
+        LEFT OUTER JOIN unique_matches m ON (t.team_id = m.home_team_id OR t.team_id = m.away_team_id)
+        GROUP BY t.team_id, t.team_name
+        ORDER BY total_matches DESC, wins DESC
+        LIMIT 16
+    """
+    try:
+        outer_join_rows = db_api.query(outer_join_query, (analytics_league, analytics_league))
+        outer_join_data = [{
+            'team_id': row[0],
+            'team_name': row[1],
+            'league': row[2],
+            'total_matches': row[3],
+            'wins': row[4]
+        } for row in outer_join_rows]
+    except Exception as e:
+        print(f"Outer join error: {e}")
+        outer_join_data = []
+    
+    # ==================== COMPLEX QUERY 5: SET OPERATIONS (UNION) ====================
+    # Teams that won at home UNION Teams that won away
+    set_operation_query = """
+        WITH ranked_matches AS (
+            SELECT m.*, 
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
+        )
+        (
+            SELECT DISTINCT t.team_name, 'Home Win' AS win_type, m.match_date
+            FROM unique_matches m
+            JOIN Teams t ON m.home_team_id = t.team_id
+            WHERE m.home_score > m.away_score
+            ORDER BY m.match_date DESC
+            LIMIT 10
+        )
+        UNION ALL
+        (
+            SELECT DISTINCT t.team_name, 'Away Win' AS win_type, m.match_date
+            FROM unique_matches m
+            JOIN Teams t ON m.away_team_id = t.team_id
+            WHERE m.away_score > m.home_score
+            ORDER BY m.match_date DESC
+            LIMIT 10
+        )
+        ORDER BY match_date DESC
+        LIMIT 20
+    """
+    try:
+        set_op_rows = db_api.query(set_operation_query, (analytics_league,))
+        set_operation_data = [{
+            'team_name': row[0],
+            'win_type': row[1],
+            'match_date': row[2]
+        } for row in set_op_rows]
+    except Exception as e:
+        print(f"Set operation error: {e}")
+        set_operation_data = []
+    
+    # ==================== HEAD-TO-HEAD STATISTICS ====================
+    h2h_query = """
+        WITH ranked_matches AS (
+            SELECT m.*, 
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
+        )
+        SELECT 
+            t1.team_name AS team1,
+            t2.team_name AS team2,
+            COUNT(*) AS total_games,
+            SUM(CASE WHEN m.home_score > m.away_score THEN 1 ELSE 0 END) AS team1_wins,
+            SUM(CASE WHEN m.home_score < m.away_score THEN 1 ELSE 0 END) AS team2_wins,
+            SUM(CASE WHEN m.home_score = m.away_score THEN 1 ELSE 0 END) AS draws
+        FROM unique_matches m
+        JOIN Teams t1 ON m.home_team_id = t1.team_id
+        JOIN Teams t2 ON m.away_team_id = t2.team_id
+        GROUP BY t1.team_name, t2.team_name
+        HAVING COUNT(*) >= 2
+        ORDER BY total_games DESC
+        LIMIT 20
+    """
+    try:
+        h2h_rows = db_api.query(h2h_query, (analytics_league,))
+        h2h_data = [{
+            'team1': row[0],
+            'team2': row[1],
+            'total_games': row[2],
+            'team1_wins': row[3],
+            'team2_wins': row[4],
+            'draws': row[5]
+        } for row in h2h_rows]
+    except Exception as e:
+        print(f"H2H error: {e}")
+        h2h_data = []
+    
+    if fmt == 'json':
+        return jsonify({
+            'matches': matches,
+            'pagination': {'page': page, 'per_page': per_page, 'total': total_count, 'pages': total_pages},
+            'analytics': analytics
+        })
+    
+    # ==================== QUICK STATS FOR DASHBOARD ====================
+    quick_stats_query = """
+        WITH ranked_matches AS (
+            SELECT m.*, 
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        )
+        SELECT 
+            COUNT(*) AS total_matches,
+            COUNT(CASE WHEN home_score > away_score THEN 1 END) AS home_wins,
+            COUNT(CASE WHEN home_score < away_score THEN 1 END) AS away_wins,
+            COUNT(CASE WHEN home_score = away_score THEN 1 END) AS draws,
+            ROUND(AVG(home_score + away_score)::numeric, 1) AS avg_total_score,
+            MAX(home_score + away_score) AS highest_score,
+            COUNT(DISTINCT home_team_id) + COUNT(DISTINCT away_team_id) AS unique_teams
+        FROM ranked_matches
+        WHERE rn = 1
+    """
+    try:
+        stats_row = db_api.query(quick_stats_query, (analytics_league,))[0]
+        quick_stats = {
+            'total_matches': stats_row[0],
+            'home_wins': stats_row[1],
+            'away_wins': stats_row[2],
+            'draws': stats_row[3],
+            'home_win_pct': round(stats_row[1] * 100 / stats_row[0], 1) if stats_row[0] > 0 else 0,
+            'avg_total_score': float(stats_row[4]) if stats_row[4] else 0,
+            'highest_score': stats_row[5],
+        }
+    except:
+        quick_stats = {}
+    
+    return render_template('matches.html', 
+        matches=matches, 
+        teams=teams, 
+        analytics=analytics,
+        complex_join_data=complex_join_data,
+        nested_data=nested_data,
+        outer_join_data=outer_join_data,
+        set_operation_data=set_operation_data,
+        h2h_data=h2h_data,
+        quick_stats=quick_stats,
+        analytics_display_season=analytics_display_season,
+        # Pagination data
+        current_page=page,
+        total_pages=total_pages,
+        per_page=per_page,
+        total_count=total_count,
+        # Filter data for dropdowns
+        leagues=leagues,
+        cities=cities,
+        all_weeks=all_weeks,
+        # Selected filter values (to maintain state)
+        selected_league=selected_league,
+        selected_city=selected_city,
+        selected_weeks=selected_weeks,
+        search_team=search_team,
+        date_from=date_from,
+        date_to=date_to,
+        score_filter=score_filter,
+        min_score_diff=min_score_diff
+    )
 
 # --- MATCHES: CREATE (Add Match) ---
 @app.route('/matches/add', methods=['POST'])
+@login_required
 def add_match():
     try:
         data = request.form
@@ -610,6 +1081,17 @@ def add_match():
         league = data.get('league')
         match_city = data.get('match_city')
         match_saloon = data.get('match_saloon')
+        
+        # Validation: Check if match_id is provided
+        if not match_id or not match_id.strip():
+            flash("Error: Match ID is required!", "danger")
+            return redirect(url_for('matches_page'))
+        
+        # Validation: Check if match_id already exists
+        existing = db_api.query("SELECT 1 FROM Matches WHERE match_id = %s", (match_id,))
+        if existing:
+            flash(f"Error: Match ID '{match_id}' already exists!", "danger")
+            return redirect(url_for('matches_page'))
         
         # Validation: Check if home and away teams are different
         if home_team_id == away_team_id:
@@ -639,6 +1121,7 @@ def add_match():
 
 # --- MATCHES: UPDATE (Edit Match/Scores) ---
 @app.route('/matches/update', methods=['POST'])
+@login_required
 def update_match():
     try:
         data = request.form
@@ -656,14 +1139,34 @@ def update_match():
         match_city = data.get('match_city')
         match_saloon = data.get('match_saloon')
         
-        # Validation
+        # Validation: Teams cannot be the same
         if home_team_id == away_team_id:
             flash("Error: Home and away teams cannot be the same!", "danger")
             return redirect(url_for('matches_page'))
         
-        # Convert scores to int or None
-        home_score = int(home_score) if home_score and home_score.strip() else None
-        away_score = int(away_score) if away_score and away_score.strip() else None
+        # Convert scores to int or None with validation
+        try:
+            home_score = int(home_score) if home_score and home_score.strip() else None
+            away_score = int(away_score) if away_score and away_score.strip() else None
+            
+            # Validate scores are non-negative
+            if home_score is not None and home_score < 0:
+                flash("Error: Home score cannot be negative!", "danger")
+                return redirect(url_for('matches_page'))
+            if away_score is not None and away_score < 0:
+                flash("Error: Away score cannot be negative!", "danger")
+                return redirect(url_for('matches_page'))
+            
+            # Validate reasonable score range (basketball typically 0-200)
+            if home_score is not None and home_score > 300:
+                flash("Error: Home score seems unrealistic (>300)!", "danger")
+                return redirect(url_for('matches_page'))
+            if away_score is not None and away_score > 300:
+                flash("Error: Away score seems unrealistic (>300)!", "danger")
+                return redirect(url_for('matches_page'))
+        except ValueError:
+            flash("Error: Scores must be valid numbers!", "danger")
+            return redirect(url_for('matches_page'))
         
         # SQL Update
         sql = """
@@ -697,6 +1200,7 @@ def update_match():
 
 # --- MATCHES: DELETE ---
 @app.route('/matches/delete/<string:match_id>', methods=['POST'])
+@login_required
 def delete_match(match_id):
     try:
         sql = "DELETE FROM Matches WHERE match_id = %s"
