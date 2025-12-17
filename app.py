@@ -1314,7 +1314,21 @@ def standings_page():
     # 3. Dinamik SQL İnşası
     # ---------------------------------------------------------
     base_sql = """
-        SELECT s.*, t.team_url
+        SELECT 
+            s.league, 
+            s.team_rank, 
+            s.team_name, 
+            s.team_matches_played, 
+            s.team_wins, 
+            s.team_losses, 
+            s.team_points_scored, 
+            s.team_points_conceded, 
+            s.team_home_points, 
+            s.team_home_goal_difference, 
+            s.team_total_goal_difference, 
+            s.team_total_points,
+            s.team_id,   -- <--- YENİ EKLENEN KISIM
+            t.team_url
         FROM standings s
         LEFT JOIN Teams t ON s.league = t.league AND s.team_name = t.team_name
     """
@@ -1368,9 +1382,19 @@ def standings_page():
 
     # Dictionary'e çevir
     cols = [
-        "league","team_rank","team_name","team_matches_played","team_wins","team_losses",
-        "team_points_scored","team_points_conceded","team_home_points",
-        "team_home_goal_difference","team_total_goal_difference","team_total_points",
+        "league",
+        "team_rank",
+        "team_name",
+        "team_matches_played",
+        "team_wins",
+        "team_losses",
+        "team_points_scored",
+        "team_points_conceded",
+        "team_home_points",
+        "team_home_goal_difference",
+        "team_total_goal_difference",
+        "team_total_points",
+        "team_id",  # <--- YENİ EKLENEN KISIM
         "team_url"
     ]
     standings = [dict(zip(cols, row)) for row in rows]
@@ -1379,7 +1403,6 @@ def standings_page():
         'standings.html', 
         standings=standings, 
         leagues=leagues,
-        # Mevcut filtreleri template'e geri gönderiyoruz ki inputlar silinmesin
         filters=request.args 
     )
 def safe_int(value):

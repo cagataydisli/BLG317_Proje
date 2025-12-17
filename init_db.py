@@ -255,6 +255,7 @@ TABLE_SPECS = [
               league TEXT NOT NULL,
               team_rank INTEGER,
               team_name TEXT NOT NULL,
+              team_id INT, --fk 
               team_matches_played INTEGER,
               team_wins INTEGER,
               team_losses INTEGER,
@@ -370,7 +371,31 @@ def init_db():
         """)
     except Exception as e:
         print("[init_db] Note: Foreign key might already exist.", e)
+    try:
+        print("[init_db] Updating standings team_ids based on Name and League...")
+        
+        # İki tablodaki league string'i ve team_name string'i birebir aynıysa ID'yi basar.
+        db_api.execute("""
+            UPDATE standings
+            SET team_id = Teams.team_id
+            FROM Teams
+            WHERE standings.team_name = Teams.team_name
+              AND standings.league = Teams.league;
+        """)
+        print("[init_db] standings team_ids updated.")
 
+        # FOREIGN KEY EKLEME
+        print("[init_db] Adding Foreign Key to standings table...")
+        db_api.execute("""
+            ALTER TABLE standings
+            ADD CONSTRAINT fk_standings_team
+            FOREIGN KEY (team_id) REFERENCES Teams(team_id)
+            ON DELETE CASCADE;
+        """)
+        print("[init_db] FK constraint added to standings.")
+
+    except Exception as e:
+        print(f"[init_db] Warning: Could not update standings FK. Reason: {e}")
 
 if __name__ == "__main__":
     init_db()
