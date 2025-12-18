@@ -296,7 +296,9 @@ TABLE_SPECS = [
                 player_name VARCHAR(200),
                 player_id INT PRIMARY KEY,
                 player_birthdate VARCHAR(50),
-                player_height VARCHAR(20)
+                player_height VARCHAR(20),
+                player_foot VARCHAR(10),
+                player_bio TEXT
             );
         """,
         columns=[
@@ -396,6 +398,17 @@ def init_db():
 
     except Exception as e:
         print(f"[init_db] Warning: Could not update standings FK. Reason: {e}")
+
+    # --- MIGRATION: Check and Add Missing Columns for Players ---
+    try:
+        print("[init_db] Checking for missing columns in Players table...")
+        # Check for player_foot
+        db_api.execute("ALTER TABLE Players ADD COLUMN IF NOT EXISTS player_foot VARCHAR(10);")
+        # Check for player_bio
+        db_api.execute("ALTER TABLE Players ADD COLUMN IF NOT EXISTS player_bio TEXT;")
+        print("[init_db] Migration checks for Players table completed.")
+    except Exception as e:
+        print(f"[init_db] Migration Error: {e}")
 
 if __name__ == "__main__":
     init_db()

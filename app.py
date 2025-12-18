@@ -147,7 +147,8 @@ def players_page():
     # --- 3. SQL ile Veriyi Çek ---
     sql = """
         SELECT p.player_id, p.player_name, p.player_height, p.player_birthdate, 
-               p.league, t.team_name, p.team_url, p.team_id
+               p.league, t.team_name, p.team_url, p.team_id,
+               p.player_foot, p.player_bio
         FROM players p
         LEFT JOIN teams t ON p.team_id = t.team_id
         WHERE 1=1
@@ -179,7 +180,7 @@ def players_page():
     today = datetime.now()
 
     for row in rows:
-        p_id, p_name, p_height, p_birth, p_league, t_name, t_url, t_id = row
+        p_id, p_name, p_height, p_birth, p_league, t_name, t_url, t_id, p_foot, p_bio = row
 
         age = 0
         birth_date_obj = datetime.min
@@ -202,6 +203,8 @@ def players_page():
             "team_name": t_name,
             "team_url": t_url,
             "team_id": t_id,  # Bunu da sözlüğe ekledik
+            "player_foot": p_foot,
+            "player_bio": p_bio,
             "sort_date": birth_date_obj,
             "sort_height": int(''.join(filter(str.isdigit, p_height))) if p_height and any(
                 c.isdigit() for c in p_height) else 0
@@ -246,6 +249,112 @@ def players_page():
                            total_count=total_count)
 
 
+# --- 7. OYUNCU İSTATİSTİKLERİ (ADVANCED QUERY) ---
+@app.route('/players/stats')
+def players_stats_page():
+    # Correlated Subquery:
+    # Her oyuncu için, o oyuncunun bulunduğu takımın boy ortalamasını (İç Sorgu) hesapla.
+    # Eğer oyuncunun boyu, takım ortalamasından büyükse listele.
+    
+    query = """
+        SELECT 
+            p.player_name, 
+            p.player_height, 
+            t.team_name, 
+            (
+                SELECT AVG(CAST(NULLIF(regexp_replace(p2.player_height, '[^0-9]', '', 'g'), '') AS INTEGER)) 
+                FROM Players p2 
+                WHERE p2.team_id = p.team_id
+            ) as team_avg_height
+        FROM Players p
+        JOIN Teams t ON p.team_id = t.team_id
+        WHERE 
+            CAST(NULLIF(regexp_replace(p.player_height, '[^0-9]', '', 'g'), '') AS INTEGER) > 
+            (
+                SELECT AVG(CAST(NULLIF(regexp_replace(p3.player_height, '[^0-9]', '', 'g'), '') AS INTEGER)) 
+                FROM Players p3 
+                WHERE p3.team_id = p.team_id
+            )
+        ORDER BY t.team_name, p.player_name
+    """
+    
+    try:
+        rows = db_api.query(query)
+    except Exception as e:
+        print(f"Stats Query Error: {e}")
+        rows = []
+        
+    stats = []
+    for row in rows:
+        # Clean height for calculation
+        try:
+            # "190 cm" -> 190
+            p_h_clean = int(''.join(filter(str.isdigit, str(row[1]))))
+        except:
+            p_h_clean = 0
+            
+        t_avg_clean = float(row[3]) if row[3] else 0
+        diff = int(p_h_clean - t_avg_clean)
+
+        stats.append({
+            "player_name": row[0],
+            "player_height": row[1],
+            "team_name": row[2],
+            "team_avg_height": round(row[3], 1) if row[3] else 0,
+            "diff": diff
+        })
+        
+    # --- EKSTRA ADVANCED QUERIES ---
+
+    # 1. En Skorer Takımın Oyuncuları (Nested)
+    q1 = """
+        SELECT player_name, team_name, player_height 
+        FROM Players 
+        WHERE team_id = (
+            SELECT team_id FROM standings ORDER BY team_points_scored DESC LIMIT 1
+        )
+    """
+    
+    # 2. Galibiyetsiz Hocalar (Exists/Join)
+    q2 = """
+        SELECT tr.technic_member_name, t.team_name 
+        FROM technic_roster tr
+        JOIN Teams t ON tr.team_id = t.team_id
+        WHERE t.team_name IN (
+            SELECT team_name FROM standings WHERE team_wins = 0
+        )
+    """
+
+    # 3. Maç Yapmamış Takımlar (NOT IN)
+    q3 = """
+        SELECT team_name, league 
+        FROM Teams 
+        WHERE team_id NOT IN (
+            SELECT home_team_id FROM Matches 
+            UNION 
+            SELECT away_team_id FROM Matches
+        )
+    """
+
+    try:
+        top_scorer_players = db_api.query(q1)
+    except: top_scorer_players = []
+
+    try:
+        winless_coaches = db_api.query(q2)
+    except: winless_coaches = []
+
+    try:
+        inactive_teams = db_api.query(q3)
+    except: inactive_teams = []
+
+    return render_template('players_stats.html', 
+                           stats=stats,
+                           top_scorer_players=top_scorer_players,
+                           winless_coaches=winless_coaches,
+                           inactive_teams=inactive_teams)
+
+
 # --- YENİ OYUNCU EKLEME ---
 @app.route('/players/add', methods=['POST'])
 @login_required
@@ -260,19 +369,22 @@ def add_player():
         team_id = data.get('team_id')
         height = data.get('player_height')
         birthdate = data.get('player_birthdate')
+        birthdate = data.get('player_birthdate')
         league = data.get('league')
+        foot = data.get('player_foot')
+        bio = data.get('player_bio')
 
         # SQL Ekleme Sorgusu (player_id sütununu ve değerini kaldırdık)
         sql = """
-            INSERT INTO Players (player_name, team_id, player_height, player_birthdate, league)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO Players (player_name, team_id, player_height, player_birthdate, league, player_foot, player_bio)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         """
 
         if not team_id:
             team_id = None
 
         # execute kısmından da player_id'yi siliyoruz
-        db_api.execute(sql, (player_name, team_id, height, birthdate, league))
+        db_api.execute(sql, (player_name, team_id, height, birthdate, league, foot, bio))
 
         flash(f"{player_name} başarıyla eklendi.", "success")  # Kullanıcıya bilgi verelim
         return redirect(url_for('players_page'))
@@ -309,6 +421,8 @@ def update_player():
         height = data.get('player_height')
         birthdate = data.get('player_birthdate')
         league = data.get('league')
+        foot = data.get('player_foot')
+        bio = data.get('player_bio')
 
         # team_id boş gelirse None yap (SQL hatası almamak için)
         if not team_id or team_id.strip() == "":
@@ -321,11 +435,13 @@ def update_player():
                 team_id = %s, 
                 player_height = %s, 
                 player_birthdate = %s, 
-                league = %s
+                league = %s,
+                player_foot = %s,
+                player_bio = %s
             WHERE player_id = %s
         """
 
-        db_api.execute(sql, (player_name, team_id, height, birthdate, league, player_id))
+        db_api.execute(sql, (player_name, team_id, height, birthdate, league, foot, bio, player_id))
 
         flash(f"Oyuncu ({player_name}) başarıyla güncellendi.", "success")
         return redirect(url_for('players_page'))

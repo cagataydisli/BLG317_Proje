@@ -7,22 +7,25 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h2>Oyuncu Listesi</h2>
+            <h2>Oyuncu Listesi</h2>
             <a href="/" class="btn btn-sm btn-outline-secondary">← Ana Sayfaya Dön</a>
+            <a href="/players/stats" class="btn btn-sm btn-info text-white ms-2">📊 İstatistikler (Advanced)</a>
         </div>
 
         <div>
             {% if current_user.is_authenticated %}
-                <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
-                    ✏️ Düzenle
-                </button>
-                <button id="addPlayerBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addPlayerModal">
-                    + Yeni Oyuncu
-                </button>
-                <a href="/logout" class="btn btn-danger ms-2">Çıkış Yap ({{ current_user.username }})</a>
+            <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
+                ✏️ Düzenle
+            </button>
+            <button id="addPlayerBtn" class="btn btn-success d-none" data-bs-toggle="modal"
+                data-bs-target="#addPlayerModal">
+                + Yeni Oyuncu
+            </button>
+            <a href="/logout" class="btn btn-danger ms-2">Çıkış Yap ({{ current_user.username }})</a>
             {% else %}
-                <a href="/login" class="btn btn-primary">
-                    🔒 Düzenlemek için Giriş Yap
-                </a>
+            <a href="/login" class="btn btn-primary">
+                🔒 Düzenlemek için Giriş Yap
+            </a>
             {% endif %}
         </div>
     </div>
@@ -36,31 +39,37 @@
                 <div class="row g-3 align-items-center">
 
                     <div class="col-md-4">
-                        <input type="text" name="search" class="form-control" placeholder="Oyuncu Adı Ara..." value="{{ request.args.get('search', '') }}">
+                        <input type="text" name="search" class="form-control" placeholder="Oyuncu Adı Ara..."
+                            value="{{ request.args.get('search', '') }}">
                     </div>
 
                     <div class="col-md-3">
                         <select name="sort_by" class="form-select" onchange="resetPageAndSubmit()">
                             <option value="">Sıralama Seçiniz...</option>
-                            <option value="name_asc" {% if request.args.get('sort_by') == 'name_asc' %}selected{% endif %}>İsim (A-Z)</option>
-                            <option value="age_asc" {% if request.args.get('sort_by') == 'age_asc' %}selected{% endif %}>Yaş (Gençten Yaşlıya)</option>
-                            <option value="age_desc" {% if request.args.get('sort_by') == 'age_desc' %}selected{% endif %}>Yaş (Yaşlıdan Gence)</option>
-                            <option value="height_desc" {% if request.args.get('sort_by') == 'height_desc' %}selected{% endif %}>Boy (Uzundan Kısaya)</option>
+                            <option value="name_asc" {% if request.args.get('sort_by')=='name_asc' %}selected{% endif
+                                %}>İsim (A-Z)</option>
+                            <option value="age_asc" {% if request.args.get('sort_by')=='age_asc' %}selected{% endif %}>
+                                Yaş (Gençten Yaşlıya)</option>
+                            <option value="age_desc" {% if request.args.get('sort_by')=='age_desc' %}selected{% endif
+                                %}>Yaş (Yaşlıdan Gence)</option>
+                            <option value="height_desc" {% if request.args.get('sort_by')=='height_desc' %}selected{%
+                                endif %}>Boy (Uzundan Kısaya)</option>
                         </select>
                     </div>
 
                     <div class="col-md-2">
                         <select name="per_page" class="form-select" onchange="resetPageAndSubmit()">
-                            <option value="20" {% if per_page == 20 %}selected{% endif %}>20 Satır</option>
-                            <option value="50" {% if per_page == 50 %}selected{% endif %}>50 Satır</option>
-                            <option value="100" {% if per_page == 100 %}selected{% endif %}>100 Satır</option>
-                            <option value="1000" {% if per_page == 1000 %}selected{% endif %}>Tümü</option>
+                            <option value="20" {% if per_page==20 %}selected{% endif %}>20 Satır</option>
+                            <option value="50" {% if per_page==50 %}selected{% endif %}>50 Satır</option>
+                            <option value="100" {% if per_page==100 %}selected{% endif %}>100 Satır</option>
+                            <option value="1000" {% if per_page==1000 %}selected{% endif %}>Tümü</option>
                         </select>
                     </div>
 
                     <div class="col-md-3 d-flex gap-2">
-                        <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal" data-bs-target="#filterModal">
-                             Filtrele {% if selected_teams or selected_leagues %}(Seçili){% endif %}
+                        <button type="button" class="btn btn-warning w-100" data-bs-toggle="modal"
+                            data-bs-target="#filterModal">
+                            Filtrele {% if selected_teams or selected_leagues %}(Seçili){% endif %}
                         </button>
                         <button type="submit" class="btn btn-primary" onclick="resetPageAndSubmit()">Ara</button>
                     </div>
@@ -69,22 +78,41 @@
                 <div class="modal fade" id="filterModal" tabindex="-1">
                     <div class="modal-dialog modal-lg">
                         <div class="modal-content">
-                            <div class="modal-header"><h5 class="modal-title">Detaylı Filtreleme</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                            <div class="modal-header">
+                                <h5 class="modal-title">Detaylı Filtreleme</h5><button type="button" class="btn-close"
+                                    data-bs-dismiss="modal"></button>
+                            </div>
                             <div class="modal-body">
                                 <div class="row">
-                                    <div class="col-md-6 border-end"><h6>Takımlar</h6><div style="max-height: 300px; overflow-y: auto;">
+                                    <div class="col-md-6 border-end">
+                                        <h6>Takımlar</h6>
+                                        <div style="max-height: 300px; overflow-y: auto;">
                                             {% for team in all_teams %}
-                                            <div class="form-check"><input class="form-check-input" type="checkbox" name="teams" value="{{ team }}" id="t_{{ loop.index }}" {% if team in selected_teams %}checked{% endif %}><label class="form-check-label" for="t_{{ loop.index }}">{{ team }}</label></div>
+                                            <div class="form-check"><input class="form-check-input" type="checkbox"
+                                                    name="teams" value="{{ team }}" id="t_{{ loop.index }}" {% if team
+                                                    in selected_teams %}checked{% endif %}><label
+                                                    class="form-check-label" for="t_{{ loop.index }}">{{ team }}</label>
+                                            </div>
                                             {% endfor %}
-                                    </div></div>
-                                    <div class="col-md-6"><h6>Ligler</h6><div style="max-height: 300px; overflow-y: auto;">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>Ligler</h6>
+                                        <div style="max-height: 300px; overflow-y: auto;">
                                             {% for league in all_leagues %}
-                                            <div class="form-check"><input class="form-check-input" type="checkbox" name="leagues" value="{{ league }}" id="l_{{ loop.index }}" {% if league in selected_leagues %}checked{% endif %}><label class="form-check-label" for="l_{{ loop.index }}">{{ league }}</label></div>
+                                            <div class="form-check"><input class="form-check-input" type="checkbox"
+                                                    name="leagues" value="{{ league }}" id="l_{{ loop.index }}" {% if
+                                                    league in selected_leagues %}checked{% endif %}><label
+                                                    class="form-check-label" for="l_{{ loop.index }}">{{ league
+                                                    }}</label></div>
                                             {% endfor %}
-                                    </div></div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button><button type="submit" class="btn btn-primary" onclick="resetPageAndSubmit()">Uygula</button></div>
+                            <div class="modal-footer"><button type="button" class="btn btn-secondary"
+                                    data-bs-dismiss="modal">Kapat</button><button type="submit" class="btn btn-primary"
+                                    onclick="resetPageAndSubmit()">Uygula</button></div>
                         </div>
                     </div>
                 </div>
@@ -99,7 +127,8 @@
                 <th>Oyuncu Adı</th>
                 <th>Takım</th>
                 <th>Boy</th>
-                <th>Yaş</th> <th>Doğum Tarihi</th>
+                <th>Yaş</th>
+                <th>Doğum Tarihi</th>
                 <th>Lig</th>
                 <th class="delete-col d-none">İşlem</th>
             </tr>
@@ -111,18 +140,18 @@
                 <td>{{ player.player_name }}</td>
                 <td>
                     {% if player.team_url %}
-                        <a href="{{ player.team_url }}" target="_blank">{{ player.team_name or 'Takımsız' }}</a>
+                    <a href="{{ player.team_url }}" target="_blank">{{ player.team_name or 'Takımsız' }}</a>
                     {% else %}
-                        {{ player.team_name or 'Takımsız' }}
+                    {{ player.team_name or 'Takımsız' }}
                     {% endif %}
                 </td>
                 <td>{{ player.player_height or '-' }}</td>
 
                 <td>
                     {% if player.age != '-' and player.age != 'Bilinmiyor' %}
-                        <span class="badge bg-info text-dark">{{ player.age }}</span>
+                    <span class="badge bg-info text-dark">{{ player.age }}</span>
                     {% else %}
-                        -
+                    -
                     {% endif %}
                 </td>
 
@@ -130,16 +159,16 @@
                 <td>{{ player.league or '-' }}</td>
 
                 <td class="delete-col d-none">
-                    <button class="btn btn-sm btn-warning me-1"
-                            data-bs-toggle="modal"
-                            data-bs-target="#editPlayerModal"
-                            onclick="fillEditModal(
+                    <button class="btn btn-sm btn-warning me-1" data-bs-toggle="modal" data-bs-target="#editPlayerModal"
+                        onclick="fillEditModal(
                                 '{{ player.player_id }}',
                                 '{{ player.player_name }}',
                                 '{{ player.team_id }}',
                                 '{{ player.player_height }}',
                                 '{{ player.player_birthdate }}',
-                                '{{ player.league }}'
+                                '{{ player.league }}',
+                                '{{ player.player_foot or "" }}',
+                                '{{ player.player_bio or "" }}'
                             )">
                         ✏️
                     </button>
@@ -150,7 +179,8 @@
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="text-center">Kayıtlı oyuncu bulunamadı.</td> </tr>
+                <td colspan="8" class="text-center">Kayıtlı oyuncu bulunamadı.</td>
+            </tr>
             {% endfor %}
         </tbody>
     </table>
@@ -163,18 +193,18 @@
             </li>
 
             {% for p in range(1, total_pages + 1) %}
-                {% if p == 1 or p == total_pages or (p >= current_page - 2 and p <= current_page + 2) %}
-                    <li class="page-item {% if p == current_page %}active{% endif %}">
-                        <button class="page-link" onclick="goToPage({{ p }})">{{ p }}</button>
-                    </li>
+            {% if p == 1 or p == total_pages or (p >= current_page - 2 and p <= current_page + 2) %} <li
+                class="page-item {% if p == current_page %}active{% endif %}">
+                <button class="page-link" onclick="goToPage({{ p }})">{{ p }}</button>
+                </li>
                 {% elif p == current_page - 3 or p == current_page + 3 %}
-                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                <li class="page-item disabled"><span class="page-link">...</span></li>
                 {% endif %}
-            {% endfor %}
+                {% endfor %}
 
-            <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
-                <button class="page-link" onclick="goToPage({{ current_page + 1 }})">Sonraki »</button>
-            </li>
+                <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
+                    <button class="page-link" onclick="goToPage({{ current_page + 1 }})">Sonraki »</button>
+                </li>
         </ul>
         <div class="text-center text-muted small">
             Toplam {{ total_count }} kayıt, {{ total_pages }} sayfa
@@ -184,89 +214,132 @@
 </div>
 
 <div class="modal fade" id="addPlayerModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Yeni Oyuncu Ekle</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form action="/players/add" method="POST">
-            <div class="mb-2">
-                <label>Ad Soyad:</label>
-                <input type="text" name="player_name" class="form-control" required>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Yeni Oyuncu Ekle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="mb-2">
-                <label>Takım:</label>
-                <select name="team_id" class="form-select">
-                    <option value="">-- Takımsız --</option>
-                    {% for team in teams_dropdown %}
-                        <option value="{{ team.id }}">{{ team.name }}</option>
-                    {% endfor %}
-                </select>
+            <div class="modal-body">
+                <form action="/players/add" method="POST">
+                    <div class="mb-2">
+                        <label>Ad Soyad:</label>
+                        <input type="text" name="player_name" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label>Takım:</label>
+                        <select name="team_id" class="form-select">
+                            <option value="">-- Takımsız --</option>
+                            {% for team in teams_dropdown %}
+                            <option value="{{ team.id }}">{{ team.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label>Boy:</label>
+                        <input type="text" name="player_height" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Doğum Yılı:</label>
+                        <input type="text" name="player_birthdate" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Lig:</label>
+                        <input type="text" name="league" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Tercih Ettiği Ayak:</label><br>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="player_foot" value="Right" id="footRight"
+                                checked>
+                            <label class="form-check-label" for="footRight">Sağ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="player_foot" value="Left" id="footLeft">
+                            <label class="form-check-label" for="footLeft">Sol</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="player_foot" value="Both" id="footBoth">
+                            <label class="form-check-label" for="footBoth">Her İkisi</label>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label>Biyografi:</label>
+                        <textarea name="player_bio" class="form-control" rows="3"
+                            placeholder="Oyuncu hakkında kısa bilgi..."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mt-3">Kaydet</button>
+                </form>
             </div>
-            <div class="mb-2">
-                <label>Boy:</label>
-                <input type="text" name="player_height" class="form-control">
-            </div>
-            <div class="mb-2">
-                <label>Doğum Yılı:</label>
-                <input type="text" name="player_birthdate" class="form-control">
-            </div>
-            <div class="mb-2">
-                <label>Lig:</label>
-                <input type="text" name="league" class="form-control">
-            </div>
-            <button type="submit" class="btn btn-primary w-100 mt-3">Kaydet</button>
-        </form>
-      </div>
+        </div>
     </div>
-  </div>
 </div>
 
 <div class="modal fade" id="editPlayerModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Oyuncu Düzenle</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <form action="/players/update" method="POST">
-            <div class="mb-2">
-                <label>Oyuncu ID:</label>
-                <input type="number" name="player_id" id="edit_player_id" class="form-control" readonly>
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Oyuncu Düzenle</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="mb-2">
-                <label>Ad Soyad:</label>
-                <input type="text" name="player_name" id="edit_player_name" class="form-control" required>
+            <div class="modal-body">
+                <form action="/players/update" method="POST">
+                    <div class="mb-2">
+                        <label>Oyuncu ID:</label>
+                        <input type="number" name="player_id" id="edit_player_id" class="form-control" readonly>
+                    </div>
+                    <div class="mb-2">
+                        <label>Ad Soyad:</label>
+                        <input type="text" name="player_name" id="edit_player_name" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label>Takım:</label>
+                        <select name="team_id" id="edit_team_id" class="form-select">
+                            <option value="">-- Takımsız --</option>
+                            {% for team in teams_dropdown %}
+                            <option value="{{ team.id }}">{{ team.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label>Boy:</label>
+                        <input type="text" name="player_height" id="edit_player_height" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Doğum Tarihi:</label>
+                        <input type="text" name="player_birthdate" id="edit_player_birthdate" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Lig:</label>
+                        <input type="text" name="league" id="edit_player_league" class="form-control">
+                    </div>
+                    <div class="mb-2">
+                        <label>Tercih Ettiği Ayak:</label><br>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="player_foot" value="Right"
+                                id="edit_footRight">
+                            <label class="form-check-label" for="edit_footRight">Sağ</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="player_foot" value="Left"
+                                id="edit_footLeft">
+                            <label class="form-check-label" for="edit_footLeft">Sol</label>
+                        </div>
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="player_foot" value="Both"
+                                id="edit_footBoth">
+                            <label class="form-check-label" for="edit_footBoth">Her İkisi</label>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label>Biyografi:</label>
+                        <textarea name="player_bio" id="edit_player_bio" class="form-control" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100 mt-3">Güncelle</button>
+                </form>
             </div>
-            <div class="mb-2">
-                <label>Takım:</label>
-                <select name="team_id" id="edit_team_id" class="form-select">
-                    <option value="">-- Takımsız --</option>
-                    {% for team in teams_dropdown %}
-                        <option value="{{ team.id }}">{{ team.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="mb-2">
-                <label>Boy:</label>
-                <input type="text" name="player_height" id="edit_player_height" class="form-control">
-            </div>
-            <div class="mb-2">
-                <label>Doğum Tarihi:</label>
-                <input type="text" name="player_birthdate" id="edit_player_birthdate" class="form-control">
-            </div>
-            <div class="mb-2">
-                <label>Lig:</label>
-                <input type="text" name="league" id="edit_player_league" class="form-control">
-            </div>
-            <button type="submit" class="btn btn-warning w-100 mt-3">Güncelle</button>
-        </form>
-      </div>
+        </div>
     </div>
-  </div>
 </div>
 
 <script>
@@ -292,22 +365,22 @@
 
     // Oyuncu Silme Fonksiyonu (AJAX ile sayfayı yenilemeden siler)
     function deletePlayer(id) {
-        if(!confirm("Bu oyuncuyu silmek istediğine emin misin?")) return;
+        if (!confirm("Bu oyuncuyu silmek istediğine emin misin?")) return;
 
         fetch('/players/delete/' + id, { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Başarılıysa satırı tablodan kaldır
-                document.getElementById('row-' + id).remove();
-            } else {
-                alert("Silinemedi: " + data.error);
-            }
-        })
-        .catch(err => alert("Hata: " + err));
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Başarılıysa satırı tablodan kaldır
+                    document.getElementById('row-' + id).remove();
+                } else {
+                    alert("Silinemedi: " + data.error);
+                }
+            })
+            .catch(err => alert("Hata: " + err));
     }
 
-    function fillEditModal(id, name, teamId, height, birthdate, league) {
+    function fillEditModal(id, name, teamId, height, birthdate, league, foot, bio) {
         document.getElementById('edit_player_id').value = id;
         document.getElementById('edit_player_name').value = name;
 
@@ -318,6 +391,13 @@
         document.getElementById('edit_player_height').value = height;
         document.getElementById('edit_player_birthdate').value = birthdate;
         document.getElementById('edit_player_league').value = league;
+        document.getElementById('edit_player_bio').value = bio ? bio : "";
+
+        // Radio buton seçimi
+        if (foot === 'Right') document.getElementById('edit_footRight').checked = true;
+        else if (foot === 'Left') document.getElementById('edit_footLeft').checked = true;
+        else if (foot === 'Both') document.getElementById('edit_footBoth').checked = true;
+        // Hiçbiri değilse seçim yapma veya varsayılanı koru
     }
 </script>
 
@@ -326,7 +406,8 @@
 <style>
     /* Yukarı Çık Butonu CSS */
     #myBtn {
-        display: none; /* Varsayılan gizli */
+        display: none;
+        /* Varsayılan gizli */
         position: fixed;
         bottom: 20px;
         right: 30px;
@@ -334,13 +415,16 @@
         font-size: 18px;
         border: none;
         outline: none;
-        background-color: #0d6efd; /* Bootstrap Primary Rengi */
+        background-color: #0d6efd;
+        /* Bootstrap Primary Rengi */
         color: white;
         cursor: pointer;
         padding: 15px;
-        border-radius: 50%; /* Yuvarlak */
-        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+        border-radius: 50%;
+        /* Yuvarlak */
+        box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
     }
+
     #myBtn:hover {
         background-color: #0b5ed7;
     }
@@ -364,7 +448,7 @@
     let mybutton = document.getElementById("myBtn");
 
     // Sayfa aşağı kaydırılınca butonu göster
-    window.onscroll = function() {scrollFunction()};
+    window.onscroll = function () { scrollFunction() };
 
     function scrollFunction() {
         if (document.body.scrollTop > 300 || document.documentElement.scrollTop > 300) {
