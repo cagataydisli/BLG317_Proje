@@ -1,5 +1,13 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Technical Staff</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</head>
 
+<<<<<<< Updated upstream
 {% block title %}Teknik Ekip{% endblock %}
 
 {% block content %}
@@ -388,3 +396,213 @@
     }
 </script>
 {% endblock %}
+=======
+<body class="bg-light">
+
+<div class="container mt-4">
+
+    <h2 class="mb-3">Technical Staff</h2>
+
+    <!-- ================= FILTER FORM ================= -->
+    <form method="get" class="row g-2 mb-3">
+
+        <div class="col-md-3">
+            <input type="text" name="name" class="form-control"
+                   placeholder="Name"
+                   value="{{ filters.get('name','') }}">
+        </div>
+
+        <div class="col-md-3">
+            <input type="text" name="role" class="form-control"
+                   placeholder="Role"
+                   value="{{ filters.get('role','') }}">
+        </div>
+
+        <div class="col-md-3">
+            <input type="text" name="team" class="form-control"
+                   placeholder="Team"
+                   value="{{ filters.get('team','') }}">
+        </div>
+
+        <div class="col-md-2">
+            <input type="text" name="league" class="form-control"
+                   placeholder="League"
+                   value="{{ filters.get('league','') }}">
+        </div>
+
+        <div class="col-md-1 d-grid">
+            <button class="btn btn-primary">Filter</button>
+        </div>
+
+    </form>
+
+    <!-- ================= ADD BUTTON ================= -->
+    {% if current_user.is_authenticated %}
+    <button class="btn btn-success mb-3"
+            data-bs-toggle="modal"
+            data-bs-target="#addModal">
+        ➕ Add Staff
+    </button>
+    {% endif %}
+
+    <!-- ================= TABLE ================= -->
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover bg-white">
+            <thead class="table-dark">
+            <tr>
+                <th>Name</th>
+                <th>Role</th>
+                <th>Team</th>
+                <th>League</th>
+                {% if current_user.is_authenticated %}
+                <th width="140">Actions</th>
+                {% endif %}
+            </tr>
+            </thead>
+
+            <tbody>
+            {% for s in staff %}
+                <tr>
+                    <td>{{ s.name }}</td>
+                    <td>{{ s.role }}</td>
+                    <td>{{ s.team_name }}</td>
+                    <td>{{ s.league }}</td>
+
+                    {% if current_user.is_authenticated %}
+                    <td>
+                        <button class="btn btn-sm btn-warning"
+                                onclick="openEdit(
+                                    '{{ s.technic_id }}',
+                                    '{{ s.name }}',
+                                    '{{ s.role }}',
+                                    '{{ s.team_id }}',
+                                    '{{ s.league }}'
+                                )">
+                            Edit
+                        </button>
+
+                        <button class="btn btn-sm btn-danger"
+                                onclick="deleteStaff({{ s.technic_id }})">
+                            Delete
+                        </button>
+                    </td>
+                    {% endif %}
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ================= PAGINATION ================= -->
+    <nav>
+        <ul class="pagination">
+
+            {% if current_page > 1 %}
+            <li class="page-item">
+                <a class="page-link"
+                   href="?{{ filters.to_dict() | dictsort | urlencode }}&page={{ current_page-1 }}">
+                    Prev
+                </a>
+            </li>
+            {% endif %}
+
+            <li class="page-item disabled">
+                <span class="page-link">
+                    Page {{ current_page }} / {{ total_pages }}
+                </span>
+            </li>
+
+            {% if current_page < total_pages %}
+            <li class="page-item">
+                <a class="page-link"
+                   href="?{{ filters.to_dict() | dictsort | urlencode }}&page={{ current_page+1 }}">
+                    Next
+                </a>
+            </li>
+            {% endif %}
+
+        </ul>
+    </nav>
+
+</div>
+
+<!-- ================= ADD MODAL ================= -->
+<div class="modal fade" id="addModal">
+    <div class="modal-dialog">
+        <form method="post" action="/staff/add" class="modal-content">
+
+            <div class="modal-header">
+                <h5>Add Staff</h5>
+            </div>
+
+            <div class="modal-body">
+
+                <input class="form-control mb-2" name="name" placeholder="Name" required>
+                <input class="form-control mb-2" name="role" placeholder="Role" required>
+                <input class="form-control mb-2" name="team_id" placeholder="Team ID">
+                <input class="form-control mb-2" name="league" placeholder="League">
+
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-success">Save</button>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<!-- ================= EDIT MODAL ================= -->
+<div class="modal fade" id="editModal">
+    <div class="modal-dialog">
+        <form method="post" action="/staff/update" class="modal-content">
+
+            <input type="hidden" name="technic_id" id="e_id">
+
+            <div class="modal-header">
+                <h5>Edit Staff</h5>
+            </div>
+
+            <div class="modal-body">
+
+                <input class="form-control mb-2" id="e_name" name="name" required>
+                <input class="form-control mb-2" id="e_role" name="role" required>
+                <input class="form-control mb-2" id="e_team" name="team_id">
+                <input class="form-control mb-2" id="e_league" name="league">
+
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-warning">Update</button>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<script>
+function openEdit(id, name, role, team, league) {
+    document.getElementById('e_id').value = id;
+    document.getElementById('e_name').value = name;
+    document.getElementById('e_role').value = role;
+    document.getElementById('e_team').value = team;
+    document.getElementById('e_league').value = league;
+
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+
+function deleteStaff(id) {
+    if (!confirm("Delete this staff member?")) return;
+
+    fetch(`/staff/delete/${id}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.success) location.reload();
+            else alert(d.error);
+        });
+}
+</script>
+
+</body>
+</html>
+>>>>>>> Stashed changes
