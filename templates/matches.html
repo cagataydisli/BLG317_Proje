@@ -3,6 +3,12 @@
 {% block title %}Matches - BSL Database{% endblock %}
 
 {% block content %}
+<style>
+    .match-row a:hover {
+        text-decoration: underline !important;
+        opacity: 0.8;
+    }
+</style>
 <div class="container-fluid mt-4">
     <!-- ==================== HEADER SECTION ==================== -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -46,7 +52,7 @@
     <!-- ==================== QUICK STATS DASHBOARD ==================== -->
     {% if quick_stats %}
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-4 col-lg">
             <div class="card bg-primary text-white h-100">
                 <div class="card-body text-center py-3">
                     <h3 class="mb-0">{{ quick_stats.total_matches }}</h3>
@@ -54,35 +60,35 @@
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-4 col-lg">
             <div class="card bg-success text-white h-100">
                 <div class="card-body text-center py-3">
-                    <h3 class="mb-0">{{ quick_stats.home_win_pct }}%</h3>
-                    <small>Home Win Rate</small>
+                    <h3 class="mb-0">{{ quick_stats.home_wins }}</h3>
+                    <small>🏠 Home Wins ({{ quick_stats.home_win_pct }}%)</small>
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-4 col-lg">
             <div class="card bg-danger text-white h-100">
                 <div class="card-body text-center py-3">
                     <h3 class="mb-0">{{ quick_stats.away_wins }}</h3>
-                    <small>Away Wins</small>
+                    <small>✈️ Away Wins ({{ quick_stats.away_win_pct }}%)</small>
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-6 col-lg">
             <div class="card bg-info text-white h-100">
                 <div class="card-body text-center py-3">
                     <h3 class="mb-0">{{ quick_stats.avg_total_score }}</h3>
-                    <small>Avg Points/Game</small>
+                    <small>Avg Total Points</small>
                 </div>
             </div>
         </div>
-        <div class="col-6 col-md-3 col-lg">
+        <div class="col-6 col-md-6 col-lg">
             <div class="card bg-warning text-dark h-100">
                 <div class="card-body text-center py-3">
                     <h3 class="mb-0">{{ quick_stats.highest_score }}</h3>
-                    <small>Highest Score</small>
+                    <small>Highest Total</small>
                 </div>
             </div>
         </div>
@@ -105,39 +111,119 @@
         <div class="collapse show" id="filterPanel">
             <div class="card-body">
                 <form method="get" id="filterForm">
-                    <div class="row g-2 mb-3">
-                        <!-- Team Search -->
+                    <!-- ROW 1: Team Filters -->
+                    <div class="row g-2 mb-2">
                         <div class="col-md-3">
-                            <input type="text" name="search_team" class="form-control" 
-                                   placeholder="🔎 Search team..." value="{{ search_team or '' }}">
+                            <label class="form-label small text-muted mb-1">🏠 Home Team</label>
+                            <select name="home_team" class="form-select form-select-sm">
+                                <option value="">Any Home Team</option>
+                                {% for team in teams %}
+                                <option value="{{ team.team_id }}" {% if home_team_filter == team.team_id|string %}selected{% endif %}>{{ team.team_name }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
-                        <!-- League -->
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">✈️ Away Team</label>
+                            <select name="away_team" class="form-select form-select-sm">
+                                <option value="">Any Away Team</option>
+                                {% for team in teams %}
+                                <option value="{{ team.team_id }}" {% if away_team_filter == team.team_id|string %}selected{% endif %}>{{ team.team_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">🏀 Team Involved (H or A)</label>
+                            <select name="any_team" class="form-select form-select-sm">
+                                <option value="">Any Team</option>
+                                {% for team in teams %}
+                                <option value="{{ team.team_id }}" {% if any_team_filter == team.team_id|string %}selected{% endif %}>{{ team.team_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">🔍 Search Team Name</label>
+                            <input type="text" name="search_team" class="form-control form-control-sm"
+                                   placeholder="Type to search..." value="{{ search_team or '' }}">
+                        </div>
+                    </div>
+
+                    <!-- ROW 2: Location & Status Filters -->
+                    <div class="row g-2 mb-2">
                         <div class="col-md-2">
-                            <select name="league" class="form-select">
+                            <label class="form-label small text-muted mb-1">🏆 League</label>
+                            <select name="league" class="form-select form-select-sm">
                                 <option value="">All Leagues</option>
                                 {% for league in leagues %}
                                 <option value="{{ league }}" {% if selected_league == league %}selected{% endif %}>{{ league }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <!-- City -->
                         <div class="col-md-2">
-                            <select name="city" class="form-select">
+                            <label class="form-label small text-muted mb-1">🌆 City</label>
+                            <select name="city" class="form-select form-select-sm">
                                 <option value="">All Cities</option>
                                 {% for city in cities %}
                                 <option value="{{ city }}" {% if selected_city == city %}selected{% endif %}>{{ city }}</option>
                                 {% endfor %}
                             </select>
                         </div>
-                        <!-- Date Range -->
-                        <div class="col-md-2">
-                            <input type="date" name="date_from" class="form-control" value="{{ date_from or '' }}" placeholder="From">
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">🏟️ Arena/Saloon</label>
+                            <select name="saloon" class="form-select form-select-sm">
+                                <option value="">All Arenas</option>
+                                {% for saloon in all_saloons %}
+                                <option value="{{ saloon }}" {% if selected_saloon == saloon %}selected{% endif %}>{{ saloon }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                         <div class="col-md-2">
-                            <input type="date" name="date_to" class="form-control" value="{{ date_to or '' }}" placeholder="To">
+                            <label class="form-label small text-muted mb-1">📊 Match Status</label>
+                            <select name="match_status" class="form-select form-select-sm">
+                                <option value="">All Matches</option>
+                                <option value="played" {% if match_status == 'played' %}selected{% endif %}>✅ Played</option>
+                                <option value="unplayed" {% if match_status == 'unplayed' %}selected{% endif %}>⏳ Unplayed</option>
+                            </select>
                         </div>
-                        <div class="col-md-1">
-                            <input type="number" name="min_score_diff" class="form-control" placeholder="Diff" min="0" value="{{ min_score_diff or '' }}">
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">🎯 Game Type</label>
+                            <select name="game_closeness" class="form-select form-select-sm">
+                                <option value="">All Games</option>
+                                <option value="close" {% if game_closeness == 'close' %}selected{% endif %}>🔥 Close (≤5 pts)</option>
+                                <option value="blowout" {% if game_closeness == 'blowout' %}selected{% endif %}>💥 Blowout (≥20 pts)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- ROW 3: Date & Score Filters -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">📅 Date Preset</label>
+                            <select name="date_preset" class="form-select form-select-sm" id="datePreset">
+                                <option value="">Custom Range</option>
+                                <option value="today" {% if date_preset == 'today' %}selected{% endif %}>Today</option>
+                                <option value="week" {% if date_preset == 'week' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="month" {% if date_preset == 'month' %}selected{% endif %}>Last 30 Days</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">From Date</label>
+                            <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from or '' }}" id="dateFrom">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">To Date</label>
+                            <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to or '' }}" id="dateTo">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">Total Score Min</label>
+                            <input type="number" name="total_score_min" class="form-control form-control-sm" placeholder="e.g., 140" min="0" value="{{ total_score_min or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">Total Score Max</label>
+                            <input type="number" name="total_score_max" class="form-control form-control-sm" placeholder="e.g., 200" min="0" value="{{ total_score_max or '' }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">Min Point Diff</label>
+                            <input type="number" name="min_score_diff" class="form-control form-control-sm" placeholder="e.g., 10" min="0" value="{{ min_score_diff or '' }}">
                         </div>
                     </div>
 
@@ -153,9 +239,6 @@
 
                                 <input type="radio" class="btn-check" name="score_filter" id="sf_away" value="away_wins" {% if score_filter == 'away_wins' %}checked{% endif %}>
                                 <label class="btn btn-outline-danger" for="sf_away">✈️ Away Wins</label>
-
-                                <input type="radio" class="btn-check" name="score_filter" id="sf_draw" value="draws" {% if score_filter == 'draws' %}checked{% endif %}>
-                                <label class="btn btn-outline-warning" for="sf_draw">🤝 Draws</label>
 
                                 <input type="radio" class="btn-check" name="score_filter" id="sf_high" value="high_scoring" {% if score_filter == 'high_scoring' %}checked{% endif %}>
                                 <label class="btn btn-outline-info" for="sf_high">🔥 High Scoring</label>
@@ -189,14 +272,43 @@
                             </div>
                         </div>
                     </details>
-                    
-                    <input type="hidden" name="sort" value="{{ request.args.get('sort', 'match_date') }}">
-                    <input type="hidden" name="order" value="{{ request.args.get('order', 'desc') }}">
+
+                    <!-- ROW 5: Sorting Options -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-3">
+                            <label class="form-label small text-muted mb-1">📊 Sort By</label>
+                            <select name="sort" class="form-select form-select-sm">
+                                <option value="match_date" {% if request.args.get('sort', 'match_date') == 'match_date' %}selected{% endif %}>Match Date</option>
+                                <option value="match_week" {% if request.args.get('sort') == 'match_week' %}selected{% endif %}>Match Week</option>
+                                <option value="league" {% if request.args.get('sort') == 'league' %}selected{% endif %}>League</option>
+                                <option value="match_city" {% if request.args.get('sort') == 'match_city' %}selected{% endif %}>City</option>
+                                <option value="home_score" {% if request.args.get('sort') == 'home_score' %}selected{% endif %}>Home Score</option>
+                                <option value="away_score" {% if request.args.get('sort') == 'away_score' %}selected{% endif %}>Away Score</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small text-muted mb-1">🔽 Order</label>
+                            <select name="order" class="form-select form-select-sm">
+                                <option value="desc" {% if request.args.get('order', 'desc') == 'desc' %}selected{% endif %}>Descending</option>
+                                <option value="asc" {% if request.args.get('order') == 'asc' %}selected{% endif %}>Ascending</option>
+                            </select>
+                        </div>
+                    </div>
                 </form>
                 
-                {% if search_team or selected_league or selected_city or date_from or score_filter or selected_weeks %}
+                {% if search_team or selected_league or selected_city or date_from or score_filter or selected_weeks or home_team_filter or away_team_filter or any_team_filter or match_status or selected_saloon or game_closeness or date_preset or total_score_min or total_score_max %}
                 <div class="mt-2">
                     <a href="/matches" class="btn btn-sm btn-outline-secondary">✕ Clear All Filters</a>
+                    <span class="text-muted small ms-2">
+                        Active filters:
+                        {% if home_team_filter %}<span class="badge bg-primary">Home Team</span>{% endif %}
+                        {% if away_team_filter %}<span class="badge bg-primary">Away Team</span>{% endif %}
+                        {% if any_team_filter %}<span class="badge bg-primary">Team Involved</span>{% endif %}
+                        {% if match_status %}<span class="badge bg-info">Status: {{ match_status }}</span>{% endif %}
+                        {% if game_closeness %}<span class="badge bg-warning text-dark">{{ game_closeness }}</span>{% endif %}
+                        {% if selected_saloon %}<span class="badge bg-secondary">Arena</span>{% endif %}
+                        {% if date_preset %}<span class="badge bg-success">{{ date_preset }}</span>{% endif %}
+                    </span>
                 </div>
                 {% endif %}
             </div>
@@ -227,9 +339,9 @@
                                 <small class="text-muted">{{ match.match_hour or '' }}</small>
                             </td>
                             <td class="text-end">
-                                <span class="{% if match.home_score and match.away_score and match.home_score > match.away_score %}fw-bold text-success{% endif %}">
+                                <a href="/teams/{{ match.home_team_id }}/players" class="text-decoration-none {% if match.home_score and match.away_score and match.home_score > match.away_score %}fw-bold text-success{% else %}text-dark{% endif %}">
                                     {{ match.home_team }}
-                                </span>
+                                </a>
                                 {% if match.home_score and match.away_score and match.home_score > match.away_score %}
                                     <span class="badge bg-success ms-1">W</span>
                                 {% endif %}
@@ -249,9 +361,9 @@
                                 {% if match.home_score and match.away_score and match.home_score < match.away_score %}
                                     <span class="badge bg-success me-1">W</span>
                                 {% endif %}
-                                <span class="{% if match.home_score and match.away_score and match.home_score < match.away_score %}fw-bold text-success{% endif %}">
+                                <a href="/teams/{{ match.away_team_id }}/players" class="text-decoration-none {% if match.home_score and match.away_score and match.home_score < match.away_score %}fw-bold text-success{% else %}text-dark{% endif %}">
                                     {{ match.away_team }}
-                                </span>
+                                </a>
                             </td>
                             <td><span class="badge bg-primary bg-opacity-75">{{ match.league }}</span></td>
                             <td>
@@ -409,6 +521,9 @@
                 </div>
                 <div class="card-footer bg-white text-muted small">
                     Home teams scoring above league average
+                    {% if league_avg_home_score %}
+                    <span class="badge bg-info text-dark ms-2">League Avg: {{ league_avg_home_score }}</span>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div class="card-body text-center text-muted py-5">
@@ -436,12 +551,18 @@
                     <ul class="list-group list-group-flush">
                         {% for row in set_operation_data %}
                         <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-                            <span>{{ row.team_name }}</span>
+                            <div>
+                                <span class="fw-semibold">{{ row.team_name }}</span>
+                                <small class="text-muted ms-2">vs {{ row.opponent }}</small>
+                            </div>
                             <span>
+                                <span class="badge {% if row.win_type == 'Home Win' %}bg-success{% else %}bg-primary{% endif %}">
+                                    {{ row.team_score }}-{{ row.opponent_score }}
+                                </span>
                                 {% if row.win_type == 'Home Win' %}
-                                    <span class="badge bg-success">🏠 Home</span>
+                                    <span class="badge bg-success bg-opacity-25 text-dark">🏠 Home</span>
                                 {% else %}
-                                    <span class="badge bg-primary">✈️ Away</span>
+                                    <span class="badge bg-primary bg-opacity-25 text-dark">✈️ Away</span>
                                 {% endif %}
                                 <small class="text-muted ms-2">{{ row.match_date }}</small>
                             </span>
@@ -509,6 +630,135 @@
                 <div class="card-body text-center text-muted py-5">
                     <h5>🥊 No Rivalries Found</h5>
                     <p class="mb-0">No teams have played each other 2+ times.<br>Data may be limited for this league.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Third Row of Analytics: NEW SECTIONS -->
+    <div class="row">
+        <!-- Biggest Blowouts -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">💥 Biggest Blowouts</h6>
+                    {% if biggest_blowouts and biggest_blowouts|length > 0 %}
+                    <span class="badge bg-danger">{{ biggest_blowouts|length }} games</span>
+                    {% endif %}
+                </div>
+                {% if biggest_blowouts and biggest_blowouts|length > 0 %}
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Winner</th>
+                                    <th class="text-center">Score</th>
+                                    <th>Loser</th>
+                                    <th class="text-center">Diff</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in biggest_blowouts %}
+                                <tr>
+                                    <td class="fw-semibold">
+                                        {{ row.winner }}
+                                        {% if row.winner_location == 'Home' %}
+                                        <span class="badge bg-success bg-opacity-25 text-dark">🏠</span>
+                                        {% else %}
+                                        <span class="badge bg-primary bg-opacity-25 text-dark">✈️</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ row.winner_score }}</span>
+                                        <span class="text-muted">-</span>
+                                        <span class="badge bg-secondary">{{ row.loser_score }}</span>
+                                    </td>
+                                    <td>{{ row.loser }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-danger">+{{ row.point_diff }}</span>
+                                    </td>
+                                    <td><small class="text-muted">{{ row.match_date }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-muted small">
+                    Games with 20+ point differential
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <h5>💥 No Blowouts Found</h5>
+                    <p class="mb-0">No games with 20+ point difference.<br>Competitive league!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Home vs Away Performance -->
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">🏠🆚✈️ Home vs Away Performance</h6>
+                    {% if home_away_stats and home_away_stats|length > 0 %}
+                    <span class="badge bg-purple">{{ home_away_stats|length }} teams</span>
+                    {% endif %}
+                </div>
+                {% if home_away_stats and home_away_stats|length > 0 %}
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Team</th>
+                                    <th class="text-center">🏠 W-L</th>
+                                    <th class="text-center">✈️ W-L</th>
+                                    <th class="text-center">Diff</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in home_away_stats %}
+                                <tr>
+                                    <td class="fw-semibold small">{{ row.team_name }}</td>
+                                    <td class="text-center">
+                                        <small>
+                                            <span class="text-success">{{ row.home_wins }}</span>-<span class="text-danger">{{ row.home_games - row.home_wins }}</span>
+                                            <span class="badge bg-success bg-opacity-10 text-dark ms-1">{{ row.home_win_pct }}%</span>
+                                        </small>
+                                    </td>
+                                    <td class="text-center">
+                                        <small>
+                                            <span class="text-success">{{ row.away_wins }}</span>-<span class="text-danger">{{ row.away_games - row.away_wins }}</span>
+                                            <span class="badge bg-primary bg-opacity-10 text-dark ms-1">{{ row.away_win_pct }}%</span>
+                                        </small>
+                                    </td>
+                                    <td class="text-center">
+                                        {% set diff = row.home_win_pct - row.away_win_pct %}
+                                        {% if diff > 10 %}
+                                            <span class="badge bg-success">+{{ diff|round(1) }}%</span>
+                                        {% elif diff < -10 %}
+                                            <span class="badge bg-danger">{{ diff|round(1) }}%</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ diff|round(1) }}%</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer bg-white text-muted small">
+                    Win % comparison: Home advantage indicator
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <h5>📊 No Data Available</h5>
+                    <p class="mb-0">Teams need at least 5 games for stats.</p>
                 </div>
                 {% endif %}
             </div>
@@ -727,5 +977,32 @@
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading...';
     });
+
+    // NEW: Date preset toggle - disable manual date inputs when preset is selected
+    document.getElementById('datePreset').addEventListener('change', function() {
+        const dateFrom = document.getElementById('dateFrom');
+        const dateTo = document.getElementById('dateTo');
+        if (this.value !== '') {
+            dateFrom.disabled = true;
+            dateTo.disabled = true;
+            dateFrom.value = '';
+            dateTo.value = '';
+            dateFrom.classList.add('bg-light');
+            dateTo.classList.add('bg-light');
+        } else {
+            dateFrom.disabled = false;
+            dateTo.disabled = false;
+            dateFrom.classList.remove('bg-light');
+            dateTo.classList.remove('bg-light');
+        }
+    });
+
+    // Initialize on page load
+    if (document.getElementById('datePreset').value !== '') {
+        document.getElementById('dateFrom').disabled = true;
+        document.getElementById('dateTo').disabled = true;
+        document.getElementById('dateFrom').classList.add('bg-light');
+        document.getElementById('dateTo').classList.add('bg-light');
+    }
 </script>
 {% endblock %}

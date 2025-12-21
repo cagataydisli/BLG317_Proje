@@ -700,9 +700,20 @@ def matches_page():
     selected_city = request.args.get('city', '')
     date_from = request.args.get('date_from', '')
     date_to = request.args.get('date_to', '')
-    score_filter = request.args.get('score_filter', '')  # home_wins, away_wins, draws, high_scoring
+    score_filter = request.args.get('score_filter', '')  # home_wins, away_wins, high_scoring
     min_score_diff = request.args.get('min_score_diff', '')
     selected_weeks = request.args.getlist('weeks')  # Checkbox multi-select
+
+    # NEW FILTERS
+    home_team_filter = request.args.get('home_team', '')
+    away_team_filter = request.args.get('away_team', '')
+    any_team_filter = request.args.get('any_team', '')
+    match_status = request.args.get('match_status', '')  # played, unplayed
+    selected_saloon = request.args.get('saloon', '')
+    game_closeness = request.args.get('game_closeness', '')  # close, blowout
+    date_preset = request.args.get('date_preset', '')  # today, week, month
+    total_score_min = request.args.get('total_score_min', '')
+    total_score_max = request.args.get('total_score_max', '')
     
     # SQL injection protection - use mapping for complete control
     SORT_COLUMNS = {
@@ -717,60 +728,154 @@ def matches_page():
     order = 'DESC' if order.lower() == 'desc' else 'ASC'
     
     # ==================== DROPDOWN DATA ====================
-    # Fetch teams for dropdowns
-    teams_query = "SELECT DISTINCT team_id, team_name FROM Teams ORDER BY team_name"
+    # Fetch teams for dropdowns (get unique team names with their first team_id)
+    teams_query = """
+        SELECT MIN(team_id) as team_id, team_name
+        FROM Teams
+        GROUP BY team_name
+        ORDER BY team_name
+    """
     teams_rows = db_api.query(teams_query)
     teams = [{'team_id': row[0], 'team_name': row[1]} for row in teams_rows]
-    
+
     # Fetch unique leagues for filter
     leagues_query = "SELECT DISTINCT league FROM Matches WHERE league IS NOT NULL ORDER BY league DESC"
     leagues = [row[0] for row in db_api.query(leagues_query)]
-    
+
     # Fetch unique cities for filter
     cities_query = "SELECT DISTINCT match_city FROM Matches WHERE match_city IS NOT NULL ORDER BY match_city"
     cities = [row[0] for row in db_api.query(cities_query)]
-    
+
     # Fetch unique weeks for checkbox filter
     weeks_query = "SELECT DISTINCT match_week FROM Matches WHERE match_week IS NOT NULL ORDER BY match_week"
     all_weeks = [row[0] for row in db_api.query(weeks_query)]
+
+    # NEW: Fetch unique saloons for dropdown
+    saloons_query = "SELECT DISTINCT match_saloon FROM Matches WHERE match_saloon IS NOT NULL AND match_saloon != '' ORDER BY match_saloon"
+    all_saloons = [row[0] for row in db_api.query(saloons_query)]
     
     # ==================== DYNAMIC WHERE CLAUSE ====================
     where_clauses = ["1=1"]
     params = []
-    
+
+    # Date preset quick filter (MUST BE FIRST - overrides date_from/date_to)
+    from datetime import datetime, timedelta
+    if date_preset == 'today':
+        today = datetime.now().date()
+        where_clauses.append("m.match_date = %s")
+        params.append(today)
+    elif date_preset == 'week':
+        today = datetime.now().date()
+        week_ago = today - timedelta(days=7)
+        where_clauses.append("m.match_date >= %s AND m.match_date <= %s")
+        params.extend([week_ago, today])
+    elif date_preset == 'month':
+        today = datetime.now().date()
+        month_ago = today - timedelta(days=30)
+        where_clauses.append("m.match_date >= %s AND m.match_date <= %s")
+        params.extend([month_ago, today])
+    else:
+        # Manual date range filter (only if no preset selected)
+        if date_from:
+            where_clauses.append("m.match_date >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("m.match_date <= %s")
+            params.append(date_to)
+
     # Team name search (searches both home and away teams)
     if search_team:
         where_clauses.append("(t1.team_name ILIKE %s OR t2.team_name ILIKE %s)")
         params.extend([f"%{search_team}%", f"%{search_team}%"])
-    
+
+    # NEW: Specific home team filter (by team name, not ID)
+    if home_team_filter:
+        where_clauses.append("t1.team_name = %s")
+        # Get team name from the dropdown value (which is actually a team_id, we need to look it up)
+        try:
+            team_name_query = "SELECT team_name FROM Teams WHERE team_id = %s LIMIT 1"
+            team_name_result = db_api.query(team_name_query, (int(home_team_filter),))
+            if team_name_result:
+                params.append(team_name_result[0][0])
+        except:
+            pass
+
+    # NEW: Specific away team filter (by team name, not ID)
+    if away_team_filter:
+        where_clauses.append("t2.team_name = %s")
+        try:
+            team_name_query = "SELECT team_name FROM Teams WHERE team_id = %s LIMIT 1"
+            team_name_result = db_api.query(team_name_query, (int(away_team_filter),))
+            if team_name_result:
+                params.append(team_name_result[0][0])
+        except:
+            pass
+
+    # NEW: Any team involved filter (by team name, not ID)
+    if any_team_filter:
+        where_clauses.append("(t1.team_name = %s OR t2.team_name = %s)")
+        try:
+            team_name_query = "SELECT team_name FROM Teams WHERE team_id = %s LIMIT 1"
+            team_name_result = db_api.query(team_name_query, (int(any_team_filter),))
+            if team_name_result:
+                team_name = team_name_result[0][0]
+                params.extend([team_name, team_name])
+        except:
+            pass
+
     # League filter
     if selected_league:
         where_clauses.append("m.league = %s")
         params.append(selected_league)
-    
+
     # City filter
     if selected_city:
         where_clauses.append("m.match_city = %s")
         params.append(selected_city)
-    
-    # Date range filter
-    if date_from:
-        where_clauses.append("m.match_date >= %s")
-        params.append(date_from)
-    if date_to:
-        where_clauses.append("m.match_date <= %s")
-        params.append(date_to)
-    
+
+    # NEW: Saloon/Arena filter
+    if selected_saloon:
+        where_clauses.append("m.match_saloon = %s")
+        params.append(selected_saloon)
+
+    # NEW: Match status filter (played/unplayed)
+    if match_status == 'played':
+        where_clauses.append("m.home_score IS NOT NULL AND m.away_score IS NOT NULL")
+    elif match_status == 'unplayed':
+        where_clauses.append("m.home_score IS NULL OR m.away_score IS NULL")
+
     # Score filter (radio button)
     if score_filter == 'home_wins':
         where_clauses.append("m.home_score > m.away_score")
     elif score_filter == 'away_wins':
         where_clauses.append("m.home_score < m.away_score")
-    elif score_filter == 'draws':
-        where_clauses.append("m.home_score = m.away_score")
     elif score_filter == 'high_scoring':
         where_clauses.append("(m.home_score + m.away_score) >= 180")
-    
+
+    # NEW: Game closeness filter
+    if game_closeness == 'close':
+        # Close games: decided by 5 points or less
+        where_clauses.append("ABS(m.home_score - m.away_score) <= 5 AND m.home_score IS NOT NULL")
+    elif game_closeness == 'blowout':
+        # Blowouts: 20+ point difference
+        where_clauses.append("ABS(m.home_score - m.away_score) >= 20 AND m.home_score IS NOT NULL")
+
+    # NEW: Total score range filter
+    if total_score_min:
+        try:
+            min_val = int(total_score_min)
+            where_clauses.append("(m.home_score + m.away_score) >= %s")
+            params.append(min_val)
+        except ValueError:
+            pass
+    if total_score_max:
+        try:
+            max_val = int(total_score_max)
+            where_clauses.append("(m.home_score + m.away_score) <= %s")
+            params.append(max_val)
+        except ValueError:
+            pass
+
     # Minimum score difference
     if min_score_diff:
         try:
@@ -779,7 +884,7 @@ def matches_page():
             params.append(diff)
         except ValueError:
             pass
-    
+
     # Week multi-select (checkboxes)
     if selected_weeks:
         placeholders = ', '.join(['%s'] * len(selected_weeks))
@@ -1105,15 +1210,17 @@ def matches_page():
             SELECT * FROM ranked_matches WHERE rn = 1
         ),
         home_wins AS (
-            SELECT DISTINCT t.team_name, 'Home Win' AS win_type, m.match_date
+            SELECT DISTINCT t.team_name, 'Home Win' AS win_type, m.match_date, m.home_score, m.away_score, t2.team_name as opponent
             FROM unique_matches m
             JOIN Teams t ON m.home_team_id = t.team_id
+            JOIN Teams t2 ON m.away_team_id = t2.team_id
             WHERE m.home_score > m.away_score
         ),
         away_wins AS (
-            SELECT DISTINCT t.team_name, 'Away Win' AS win_type, m.match_date
+            SELECT DISTINCT t.team_name, 'Away Win' AS win_type, m.match_date, m.away_score as home_score, m.home_score as away_score, t2.team_name as opponent
             FROM unique_matches m
             JOIN Teams t ON m.away_team_id = t.team_id
+            JOIN Teams t2 ON m.home_team_id = t2.team_id
             WHERE m.away_score > m.home_score
         )
         SELECT * FROM (
@@ -1129,7 +1236,10 @@ def matches_page():
         set_operation_data = [{
             'team_name': row[0],
             'win_type': row[1],
-            'match_date': row[2]
+            'match_date': row[2],
+            'team_score': row[3],
+            'opponent_score': row[4],
+            'opponent': row[5]
         } for row in set_op_rows]
     except Exception as e:
         print(f"Set operation error: {e}")
@@ -1243,17 +1353,157 @@ def matches_page():
             'total_matches': stats_row[0],
             'home_wins': stats_row[1],
             'away_wins': stats_row[2],
-            'draws': stats_row[3],
             'home_win_pct': round(stats_row[1] * 100 / stats_row[0], 1) if stats_row[0] > 0 else 0,
+            'away_win_pct': round(stats_row[2] * 100 / stats_row[0], 1) if stats_row[0] > 0 else 0,
             'avg_total_score': float(stats_row[4]) if stats_row[4] else 0,
             'highest_score': stats_row[5],
         }
     except:
         quick_stats = {}
-    
-    return render_template('matches.html', 
-        matches=matches, 
-        teams=teams, 
+
+    # ==================== NEW: BIGGEST BLOWOUTS ====================
+    blowouts_query = """
+        WITH ranked_matches AS (
+            SELECT m.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
+        )
+        SELECT
+            t1.team_name AS winner,
+            t2.team_name AS loser,
+            CASE WHEN m.home_score > m.away_score THEN m.home_score ELSE m.away_score END AS winner_score,
+            CASE WHEN m.home_score > m.away_score THEN m.away_score ELSE m.home_score END AS loser_score,
+            ABS(m.home_score - m.away_score) AS point_diff,
+            m.match_date,
+            CASE WHEN m.home_score > m.away_score THEN 'Home' ELSE 'Away' END AS winner_location
+        FROM unique_matches m
+        JOIN Teams t1 ON m.home_team_id = t1.team_id
+        JOIN Teams t2 ON m.away_team_id = t2.team_id
+        WHERE ABS(m.home_score - m.away_score) >= 20
+        ORDER BY point_diff DESC, m.match_date DESC
+        LIMIT 10
+    """
+    try:
+        blowouts_rows = db_api.query(blowouts_query, (analytics_league,))
+        biggest_blowouts = [{
+            'winner': row[0],
+            'loser': row[1],
+            'winner_score': row[2],
+            'loser_score': row[3],
+            'point_diff': row[4],
+            'match_date': row[5],
+            'winner_location': row[6]
+        } for row in blowouts_rows]
+    except Exception as e:
+        print(f"Blowouts query error: {e}")
+        biggest_blowouts = []
+
+    # ==================== NEW: HOME VS AWAY PERFORMANCE ====================
+    home_away_query = """
+        WITH ranked_matches AS (
+            SELECT m.*,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
+                       ORDER BY m.match_id
+                   ) as rn
+            FROM Matches m
+            WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
+        ),
+        home_stats AS (
+            SELECT
+                t.team_name,
+                COUNT(*) as home_games,
+                SUM(CASE WHEN m.home_score > m.away_score THEN 1 ELSE 0 END) as home_wins,
+                ROUND(AVG(m.home_score)::numeric, 1) as avg_home_scored
+            FROM unique_matches m
+            JOIN Teams t ON m.home_team_id = t.team_id
+            GROUP BY t.team_name
+        ),
+        away_stats AS (
+            SELECT
+                t.team_name,
+                COUNT(*) as away_games,
+                SUM(CASE WHEN m.away_score > m.home_score THEN 1 ELSE 0 END) as away_wins,
+                ROUND(AVG(m.away_score)::numeric, 1) as avg_away_scored
+            FROM unique_matches m
+            JOIN Teams t ON m.away_team_id = t.team_id
+            GROUP BY t.team_name
+        )
+        SELECT
+            COALESCE(h.team_name, a.team_name) as team_name,
+            COALESCE(h.home_games, 0) as home_games,
+            COALESCE(h.home_wins, 0) as home_wins,
+            COALESCE(h.avg_home_scored, 0) as avg_home_scored,
+            COALESCE(a.away_games, 0) as away_games,
+            COALESCE(a.away_wins, 0) as away_wins,
+            COALESCE(a.avg_away_scored, 0) as avg_away_scored,
+            CASE WHEN h.home_games > 0 THEN ROUND((h.home_wins * 100.0 / h.home_games)::numeric, 1) ELSE 0 END as home_win_pct,
+            CASE WHEN a.away_games > 0 THEN ROUND((a.away_wins * 100.0 / a.away_games)::numeric, 1) ELSE 0 END as away_win_pct
+        FROM home_stats h
+        FULL OUTER JOIN away_stats a ON h.team_name = a.team_name
+        WHERE COALESCE(h.home_games, 0) + COALESCE(a.away_games, 0) >= 5
+        ORDER BY (COALESCE(h.home_games, 0) + COALESCE(a.away_games, 0)) DESC
+        LIMIT 12
+    """
+    try:
+        home_away_rows = db_api.query(home_away_query, (analytics_league,))
+        home_away_stats = [{
+            'team_name': row[0],
+            'home_games': row[1],
+            'home_wins': row[2],
+            'avg_home_scored': float(row[3]) if row[3] else 0,
+            'away_games': row[4],
+            'away_wins': row[5],
+            'avg_away_scored': float(row[6]) if row[6] else 0,
+            'home_win_pct': float(row[7]) if row[7] else 0,
+            'away_win_pct': float(row[8]) if row[8] else 0
+        } for row in home_away_rows]
+    except Exception as e:
+        print(f"Home/Away stats error: {e}")
+        home_away_stats = []
+
+    # ==================== NEW: LEAGUE AVERAGE FOR NESTED QUERY ====================
+    try:
+        league_avg_query = """
+            WITH ranked_matches AS (
+                SELECT m.*,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY m.match_date,
+                                        LEAST(m.home_team_id, m.away_team_id),
+                                        GREATEST(m.home_team_id, m.away_team_id)
+                           ORDER BY m.match_id
+                       ) as rn
+                FROM Matches m
+                WHERE m.league = %s AND m.home_score IS NOT NULL
+            ),
+            unique_matches AS (
+                SELECT * FROM ranked_matches WHERE rn = 1
+            )
+            SELECT ROUND(AVG(home_score)::numeric, 1) as avg_home_score
+            FROM unique_matches
+        """
+        avg_result = db_api.query(league_avg_query, (analytics_league,))
+        league_avg_home_score = float(avg_result[0][0]) if avg_result and avg_result[0][0] else 0
+    except:
+        league_avg_home_score = 0
+
+    return render_template('matches.html',
+        matches=matches,
+        teams=teams,
         analytics=analytics,
         complex_join_data=complex_join_data,
         nested_data=nested_data,
@@ -1262,6 +1512,10 @@ def matches_page():
         h2h_data=h2h_data,
         quick_stats=quick_stats,
         analytics_display_season=analytics_display_season,
+        # NEW ANALYTICS
+        biggest_blowouts=biggest_blowouts,
+        home_away_stats=home_away_stats,
+        league_avg_home_score=league_avg_home_score,
         # Pagination data
         current_page=page,
         total_pages=total_pages,
@@ -1271,6 +1525,7 @@ def matches_page():
         leagues=leagues,
         cities=cities,
         all_weeks=all_weeks,
+        all_saloons=all_saloons,
         # Selected filter values (to maintain state)
         selected_league=selected_league,
         selected_city=selected_city,
@@ -1279,7 +1534,17 @@ def matches_page():
         date_from=date_from,
         date_to=date_to,
         score_filter=score_filter,
-        min_score_diff=min_score_diff
+        min_score_diff=min_score_diff,
+        # NEW: Additional filter states
+        home_team_filter=home_team_filter,
+        away_team_filter=away_team_filter,
+        any_team_filter=any_team_filter,
+        match_status=match_status,
+        selected_saloon=selected_saloon,
+        game_closeness=game_closeness,
+        date_preset=date_preset,
+        total_score_min=total_score_min,
+        total_score_max=total_score_max
     )
 
 # --- MATCHES: CREATE (Add Match) ---
