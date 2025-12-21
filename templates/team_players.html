@@ -3,6 +3,54 @@
 {% block title %}{{ team.name }} - Oyuncular{% endblock %}
 
 {% block content %}
+<div class="row mb-4">
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6>👥 Oyuncu Sayısı</h6>
+        <h4>{{ stats.player_count }}</h4>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6>🎂 Ortalama Yaş</h6>
+        <h4>{{ stats.avg_age }}</h4>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6>🟢 En Genç</h6>
+        {% if stats.youngest %}
+          <div class="fw-bold">{{ stats.youngest.name }}</div>
+          <small class="text-muted">{{ stats.youngest.age }} yaş</small>
+        {% else %}
+          <span>-</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-center shadow-sm">
+      <div class="card-body">
+        <h6>🔴 En Yaşlı</h6>
+        {% if stats.oldest %}
+          <div class="fw-bold">{{ stats.oldest.name }}</div>
+          <small class="text-muted">{{ stats.oldest.age }} yaş</small>
+        {% else %}
+          <span>-</span>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="container mt-4">
     <!-- Başlık Alanı -->
     <div class="card bg-light mb-4 shadow-sm">

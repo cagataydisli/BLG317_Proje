@@ -12,15 +12,24 @@
         </div>
 
         <div class="d-flex gap-2">
-            <!-- Düzenle Butonu -->
-            <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
-                ✏️ Düzenle
-            </button>
+            {% if current_user.is_authenticated %}
+                <button id="toggleEditMode" class="btn btn-outline-primary" onclick="toggleEditMode()">
+                    ✏️ Düzenle
+                </button>
 
-            <!-- Yeni Takım Ekle Butonu -->
-            <button id="addTeamBtn" class="btn btn-success d-none" data-bs-toggle="modal" data-bs-target="#addTeamModal">
-                + Yeni Takım
-            </button>
+                <button id="addTeamBtn" class="btn btn-success d-none" 
+                        data-bs-toggle="modal" data-bs-target="#addTeamModal">
+                    + Yeni Takım
+                </button>
+
+                <a href="/logout" class="btn btn-danger">
+                    Çıkış Yap ({{ current_user.username }})
+                </a>
+            {% else %}
+                <a href="/login" class="btn btn-primary">
+                    🔒 Düzenlemek için Giriş Yap
+                </a>
+            {% endif %}
         </div>
     </div>
 
@@ -61,7 +70,9 @@
                     <th>Şehir</th>
                     <th>Kuruluş</th>
                     <th>Salon & Kapasite</th>
+                    {% if current_user.is_authenticated %}
                     <th class="delete-col d-none" style="width: 100px;">İşlem</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -104,9 +115,30 @@
                         </small>
                     </td>
 
+                    {% if current_user.is_authenticated %}
                     <td class="delete-col d-none">
-                        <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ team.team_id }})">🗑️ Sil</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteTeam({{ team.team_id }})">
+                            🗑️ Sil
+                        </button>
+                        <button class="btn btn-sm btn-warning me-1"
+                            data-bs-toggle="modal"
+                            data-bs-target="#editTeamModal"
+                            onclick="fillEditTeam(
+                                '{{ team.team_id }}',
+                                '{{ team.team_name }}',
+                                '{{ team.league }}',
+                                '{{ team.team_city }}',
+                                '{{ team.team_year }}',
+                                '{{ team.team_url }}',
+                                '{{ team.staff_id }}',
+                                '{{ team.saloon_name }}',
+                                '{{ team.saloon_capacity }}',
+                                '{{ team.saloon_address }}'
+                            )">
+                            ✏️
+                        </button>
                     </td>
+                    {% endif %}
                 </tr>
                 {% else %}
                 <tr>
@@ -188,6 +220,62 @@
     </div>
   </div>
 </div>
+<div class="modal fade" id="editTeamModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <form method="POST" action="/teams/update">
+        <div class="modal-header bg-warning">
+          <h5 class="modal-title">Takım Düzenle</h5>
+          <button class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+
+        <div class="modal-body">
+          <input type="hidden" name="team_id" id="edit_team_id">
+
+          <div class="mb-2">
+            <label>Takım Adı</label>
+            <input class="form-control" name="team_name" id="edit_team_name" required>
+          </div>
+
+          <div class="row">
+            <div class="col">
+              <label>Lig</label>
+              <input class="form-control" name="league" id="edit_league">
+            </div>
+            <div class="col">
+              <label>Şehir</label>
+              <input class="form-control" name="team_city" id="edit_city">
+            </div>
+            <div class="col">
+              <label>Kuruluş Yılı</label>
+              <input class="form-control" name="team_year" id="edit_year">
+            </div>
+          </div>
+
+          <div class="row mt-2">
+            <div class="col">
+              <label>Salon Adı</label>
+              <input class="form-control" name="saloon_name" id="edit_saloon">
+            </div>
+            <div class="col">
+              <label>Kapasite</label>
+              <input class="form-control" name="saloon_capacity" id="edit_capacity">
+            </div>
+          </div>
+
+          <div class="mt-2">
+            <label>Salon Adresi</label>
+            <textarea class="form-control" name="saloon_address" id="edit_address" rows="2"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-warning w-100">Güncelle</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
 
 <script>
     function toggleEditMode() {
@@ -220,4 +308,17 @@
         .catch(err => alert("Bağlantı Hatası: " + err));
     }
 </script>
+<script>
+    function fillEditTeam(id, name, league, city, year, url, staff, saloon, cap, addr) {
+        document.getElementById("edit_team_id").value = id;
+        document.getElementById("edit_team_name").value = name;
+        document.getElementById("edit_league").value = league;
+        document.getElementById("edit_city").value = city;
+        document.getElementById("edit_year").value = year;
+        document.getElementById("edit_saloon").value = saloon;
+        document.getElementById("edit_capacity").value = cap;
+        document.getElementById("edit_address").value = addr;
+    }
+</script>
+
 {% endblock %}

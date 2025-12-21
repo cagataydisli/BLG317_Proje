@@ -563,6 +563,7 @@ def teams_table_page():
 
 # --- 3. EKLEME İŞLEMİ (/teams/add) ---
 @app.route('/teams/add', methods=['POST'])
+@login_required
 def add_team():
     try:
         data = request.form
@@ -612,6 +613,7 @@ def add_team():
 
 # --- 4. SİLME İŞLEMİ (/teams/delete/ID) ---
 @app.route('/teams/delete/<int:team_id>', methods=['POST'])
+@login_required
 def delete_team(team_id):
     try:
         sql = "DELETE FROM Teams WHERE team_id = %s"
@@ -619,6 +621,46 @@ def delete_team(team_id):
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+@app.route('/teams/update', methods=['POST'])
+@login_required
+def update_team():
+    try:
+        data = request.form
+
+        sql = """
+            UPDATE Teams
+            SET team_name = %s,
+                league = %s,
+                team_city = %s,
+                team_year = %s,
+                team_url = %s,
+                staff_id = %s,
+                saloon_name = %s,
+                saloon_capacity = %s,
+                saloon_address = %s
+            WHERE team_id = %s
+        """
+
+        db_api.execute(sql, (
+            data.get('team_name'),
+            data.get('league'),
+            data.get('team_city'),
+            data.get('team_year') or None,
+            data.get('team_url'),
+            data.get('staff_id') or None,
+            data.get('saloon_name'),
+            data.get('saloon_capacity') or None,
+            data.get('saloon_address'),
+            data.get('team_id')
+        ))
+
+        flash("Takım başarıyla güncellendi.", "success")
+
+    except Exception as e:
+        print(f"TEAM UPDATE ERROR: {e}")
+        flash("Takım güncellenirken hata oluştu.", "danger")
+
+    return redirect(url_for('teams_table_page'))
 
 
 # =====================================================================
@@ -1786,9 +1828,46 @@ def team_players_page(team_id):
             "player_birthdate": row[3],
             "league": row[4]
         })
+        # --- TEAM PLAYER AGE STATISTICS ---
+    from datetime import datetime
+
+    today = datetime.now()
+    ages = []
+
+    for p in players:
+        birth = p.get("player_birthdate")
+        if birth and isinstance(birth, str) and len(birth.strip()) >= 8:
+            try:
+                bdate = datetime.strptime(birth.strip(), "%d.%m.%Y")
+                age = today.year - bdate.year - (
+                    (today.month, today.day) < (bdate.month, bdate.day)
+                )
+                ages.append({
+                    "name": p["player_name"],
+                    "age": age
+                })
+            except:
+                pass
+
+        # İstatistikleri üret
+        if ages:
+            avg_age = round(sum(a["age"] for a in ages) / len(ages), 1)
+            youngest = min(ages, key=lambda x: x["age"])
+            oldest = max(ages, key=lambda x: x["age"])
+        else:
+            avg_age = "-"
+            youngest = None
+            oldest = None
+
+        team_stats = {
+            "player_count": len(players),
+            "avg_age": avg_age,
+            "youngest": youngest,
+            "oldest": oldest
+        }
 
     # Verileri yeni bir HTML sayfasına gönderiyoruz
-    return render_template('team_players.html', team=team_info, players=players)
+    return render_template('team_players.html', team=team_info, players=players, stats= team_stats)
 
 
 
