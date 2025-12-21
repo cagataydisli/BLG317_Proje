@@ -140,23 +140,19 @@ def ensure_table_and_load(spec: TableSpec) -> int:
     print(f"[init_db] Ensuring table {spec.name} ...")
     db_api.execute(spec.ddl)
     
-    # --- EKLENEN KISIM BAŞLANGIÇ ---
     # Eğer truncate True ise ve tablo varsa içini boşalt
     if spec.truncate:
         print(f"[init_db] Truncating table {spec.name}...")
         try:
-            # CASCADE ekledik ki bağlı veriler sorun çıkarmasın
             db_api.execute(f"TRUNCATE TABLE {spec.name} CASCADE")
         except Exception as e:
-            # Tablo henüz yoksa hata verebilir, yoksayıyoruz
             print(f"[init_db] Truncate warning (might be new table): {e}")
-    # --- EKLENEN KISIM BİTİŞ ---
 
     if spec.csv_path:
         conn = db_api.get_conn()
         try:
             count = load_csv_using_conn(conn, spec)
-            conn.commit() # Transaction'ı onayla
+            conn.commit()
             print(f"[init_db] Loaded {count} rows into {spec.name}")
             return count
         except Exception as e:
@@ -171,6 +167,21 @@ def ensure_table_and_load(spec: TableSpec) -> int:
 BASE_DIR = os.path.dirname(__file__)
 
 TABLE_SPECS = [
+    # 0. Users (Authentication) - ✅ EKLENEN TABLO
+    TableSpec(
+        name="users",
+        ddl="""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(64) UNIQUE NOT NULL,
+                password_hash VARCHAR(256) NOT NULL
+            );
+        """,
+        columns=[],  # CSV yok, boş bırak
+        csv_path=None,  # CSV yok
+        truncate=False,  # Kullanıcıları silme!
+    ),
+
     # 1. Teams
     TableSpec(
         name="Teams",
@@ -204,10 +215,6 @@ TABLE_SPECS = [
         csv_path=os.path.join(BASE_DIR, "tables", "team_data.csv"),
         converter=teams_row_converter,
     ),
-
-
-
-
 
     # 2. Matches
     TableSpec(
@@ -249,13 +256,12 @@ TABLE_SPECS = [
     # 3. Standings
     TableSpec(
         name="standings",
-        # UNIQUE (league, team_name) ekliyoruz veya composite PRIMARY KEY yapıyoruz
         ddl="""
             CREATE TABLE IF NOT EXISTS standings (
               league TEXT NOT NULL,
               team_rank INTEGER,
               team_name TEXT NOT NULL,
-              team_id INT, --fk 
+              team_id INT,
               team_matches_played INTEGER,
               team_wins INTEGER,
               team_losses INTEGER,
@@ -285,6 +291,7 @@ TABLE_SPECS = [
         csv_path=os.path.join(BASE_DIR, "tables", "standings.csv"),
         truncate=True, 
     ),
+
     # 4. Players
     TableSpec(
         name="Players",
@@ -319,7 +326,7 @@ TABLE_SPECS = [
         ddl="""
             CREATE TABLE IF NOT EXISTS technic_roster (
                 staff_id SERIAL PRIMARY KEY,
-                team_id INT NOT NULL REFERENCES Teams(team_id),
+                team_id INT REFERENCES Teams(team_id) ON DELETE SET NULL,
                 team_url TEXT,
                 league VARCHAR(64),
                 technic_member_name VARCHAR(100) NOT NULL,
@@ -347,6 +354,7 @@ def init_db():
             print(f"[init_db] ERROR initializing {spec.name}: {e}")
             print(f"[init_db] Skipping {spec.name} and continuing...")
     print(f"[init_db] Initialization complete. Total rows inserted: {total}")
+
     try:
         print("[init_db] Updating Teams with staff_ids from technic_roster...")
         db_api.execute("""
@@ -362,7 +370,6 @@ def init_db():
     except Exception as e:
         print("[init_db] Warning: Could not auto-update staff_ids:", e)
 
-    # Son olarak Foreign Key İlişkisini Ekle
     try:
         print("[init_db] Adding Foreign Keys to Teams table...")
         db_api.execute("""
@@ -373,10 +380,9 @@ def init_db():
         """)
     except Exception as e:
         print("[init_db] Note: Foreign key might already exist.", e)
+
     try:
         print("[init_db] Updating standings team_ids based on Name and League...")
-        
-        # İki tablodaki league string'i ve team_name string'i birebir aynıysa ID'yi basar.
         db_api.execute("""
             UPDATE standings
             SET team_id = Teams.team_id
@@ -386,7 +392,6 @@ def init_db():
         """)
         print("[init_db] standings team_ids updated.")
 
-        # FOREIGN KEY EKLEME
         print("[init_db] Adding Foreign Key to standings table...")
         db_api.execute("""
             ALTER TABLE standings
@@ -399,43 +404,30 @@ def init_db():
     except Exception as e:
         print(f"[init_db] Warning: Could not update standings FK. Reason: {e}")
 
-    # --- MIGRATION: Check and Add Missing Columns for Players ---
     try:
         print("[init_db] Checking for missing columns in Players table...")
-        # Check for player_foot
         db_api.execute("ALTER TABLE Players ADD COLUMN IF NOT EXISTS player_foot VARCHAR(10);")
-        # Check for player_bio
         db_api.execute("ALTER TABLE Players ADD COLUMN IF NOT EXISTS player_bio TEXT;")
         print("[init_db] Migration checks for Players table completed.")
     except Exception as e:
         print(f"[init_db] Migration Error: {e}")
 
-    # --- PERFORMANCE INDEXES ---
     try:
         print("[init_db] Creating performance indexes...")
 
-        # Matches table indexes (7 indexes)
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_home_team ON Matches(home_team_id);")
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_away_team ON Matches(away_team_id);")
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_league ON Matches(league);")
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_date ON Matches(match_date);")
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_city ON Matches(match_city);")
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_week ON Matches(match_week);")
-
-        # Composite index for deduplication (critical for performance)
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_dedup ON Matches(match_date, home_team_id, away_team_id);")
-
-        # Partial index for score-based queries
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_scores ON Matches(home_score, away_score) WHERE home_score IS NOT NULL;")
-
-        # Teams table indexes (2 indexes)
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_teams_name ON Teams(team_name);")
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_teams_league ON Teams(league);")
-
-        # Technic roster index (1 index)
         db_api.execute("CREATE INDEX IF NOT EXISTS idx_technic_team ON technic_roster(team_id);")
 
-        print("[init_db] ✅ Performance indexes created successfully! (12 indexes total)")
+        print("[init_db] ✅ Performance indexes created successfully! (11 indexes total)")
     except Exception as e:
         print(f"[init_db] Warning: Could not create all indexes. Reason: {e}")
 

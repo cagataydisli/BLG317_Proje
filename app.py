@@ -11,75 +11,68 @@ app = Flask(__name__)
 app.secret_key = "345678987654345678"
 
 # --- LOGIN MANAGER KURULUMU ---
-login_manager = LoginManager()
+login_manager = LoginManager()  # ✅ BU SATIR EKSİK!
 login_manager.init_app(app)
-login_manager.login_view = 'login' # Giriş yapılmamışsa buraya yönlendir
-
-# Kullanıcı Modeli (Flask-Login için gerekli)
+login_manager.login_view = 'login'
+# Kullanıcı Modeli
 class User(UserMixin):
     def __init__(self, id, username, password_hash):
         self.id = id
         self.username = username
         self.password_hash = password_hash
-
+# --- LOGIN MANAGER ---
 @login_manager.user_loader
 def load_user(user_id):
-    # Veritabanından kullanıcıyı ID ile bulup getirir
-    sql = "SELECT id, username, password_hash FROM Users WHERE id = %s"
+    sql = r'SELECT id, username, password_hash FROM users WHERE id = %s'  # ✅ r'' eklendi
     row = db_api.query(sql, (user_id,))
     if row:
         return User(row[0][0], row[0][1], row[0][2])
     return None
 
-
-# --- GİRİŞ YAP (LOGIN) ---
+# --- LOGIN ---
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
 
-        # Kullanıcıyı bul
-        sql = "SELECT id, username, password_hash FROM Users WHERE username = %s"
+        sql = r'SELECT id, username, password_hash FROM users WHERE username = %s'  # ✅ r'' eklendi
         user_data = db_api.query(sql, (username,))
 
         if user_data:
             user_obj = User(user_data[0][0], user_data[0][1], user_data[0][2])
-            # Şifre doğru mu kontrol et
             if check_password_hash(user_obj.password_hash, password):
                 login_user(user_obj)
-                flash('Giriş başarılı!', 'success')
-                # Eğer daha önce gitmek istediği bir sayfa varsa oraya, yoksa anasayfaya
+                flash('Login successful!', 'success')
                 next_page = request.args.get('next')
                 return redirect(next_page or url_for('index'))
 
-        flash('Hatalı kullanıcı adı veya şifre', 'danger')
+        flash('Invalid username or password', 'danger')
 
     return render_template('login.html')
 
-
-# --- KAYIT OL (REGISTER) ---
+# --- REGISTER ---
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
         username = request.form.get('username')
         password = request.form.get('password')
 
-        # Basit validasyon
         if not username or not password:
-            flash("Kullanıcı adı ve şifre zorunlu", "warning")
+            flash("Username and password are required", "warning")
             return redirect(url_for('register'))
 
-        # Şifreyi güvenli hale getir (Hashle)
         hashed_pw = generate_password_hash(password)
 
         try:
-            sql = "INSERT INTO Users (username, password_hash) VALUES (%s, %s)"
+            sql = r'INSERT INTO users (username, password_hash) VALUES (%s, %s)'  # ✅ r'' eklendi
             db_api.execute(sql, (username, hashed_pw))
-            flash('Hesap oluşturuldu! Şimdi giriş yapabilirsiniz.', 'success')
+            flash('Account created! You can now login.', 'success')
             return redirect(url_for('login'))
         except Exception as e:
-            flash(f'Hata (Kullanıcı adı alınmış olabilir): {e}', 'danger')
+            print(f"REGISTER ERROR: {e}")
+            flash(f'Error: {str(e)}', 'danger')
+            return redirect(url_for('register'))
 
     return render_template('register.html')
 
@@ -1745,41 +1738,218 @@ def delete_match(match_id):
         print(f"DELETE MATCH ERROR: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
-# 4. Teknik Ekip (Musa Can Turgut)
+# 4. Teknik Ekip (Musa Can Turgut) – LIST + FILTER + PAGINATION
+# =========================================================
 @app.route('/staff')
 def staff_page():
-    # Teknik ekip ve takım isimleri
-    query = """
+
+    # -----------------------------
+    # 1. Filtre Parametreleri
+    # -----------------------------
+    f_name = request.args.get('name')
+    f_role = request.args.get('role')
+    f_team = request.args.get('team')
+    f_league = request.args.get('league')
+
+    # Sayfalama
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = 20
+    except:
+        page = 1
+        per_page = 20
+
+    # -----------------------------
+    # 2. BASE SQL (ŞEMAYA UYGUN)
+    # -----------------------------
+    base_sql = """
         SELECT 
+            tr.staff_id,
             tr.technic_member_name, 
             tr.technic_member_role, 
-            t.team_name, 
+            t.team_name,
+            t.team_id,
             tr.league
         FROM technic_roster tr
-        JOIN teams t ON tr.team_id = t.team_id
-        ORDER BY t.team_name, tr.technic_member_name
+        LEFT JOIN teams t ON tr.team_id = t.team_id
     """
-    rows = db_api.query(query)
     
+    # -----------------------------
+    # 3. FİLTRELER
+    # -----------------------------
+    where_clauses = []
+    params = []
+    
+    if f_name:
+        where_clauses.append("tr.technic_member_name ILIKE %s")
+        params.append(f"%{f_name}%")
+
+    if f_role:
+        where_clauses.append("tr.technic_member_role ILIKE %s")
+        params.append(f"%{f_role}%")
+
+    if f_team:
+        where_clauses.append("t.team_name ILIKE %s")
+        params.append(f"%{f_team}%")
+
+    if f_league:
+        where_clauses.append("tr.league ILIKE %s")
+        params.append(f"%{f_league}%")
+
+    if where_clauses:
+        base_sql += " WHERE " + " AND ".join(where_clauses)
+
+    base_sql += " ORDER BY t.team_name NULLS LAST, tr.technic_member_name"
+
+    # -----------------------------
+    # 4. QUERY ÇALIŞTIR
+    # -----------------------------
+    try:
+        if params:
+            rows = db_api.query(base_sql, tuple(params))
+        else:
+            rows = db_api.query(base_sql)
+    except Exception as e:
+        print(f"Staff query error: {e}")
+        rows = []
+
+    # -----------------------------
+    # 5. PYTHON LIST
+    # -----------------------------
     staff = []
-    for row in rows:
+    for r in rows:
         staff.append({
-            "name": row[0],
-            "role": row[1],
-            "team_name": row[2],
-            "league": row[3]
+            "staff_id": r[0],
+            "name": r[1],
+            "role": r[2],
+            "team_name": r[3] if r[3] else "Takım Yok",
+            "team_id": r[4],
+            "league": r[5]
         })
 
-    # BURASI ÖNEMLİ
-    return render_template('staff.html', staff=staff)
+    # -----------------------------
+    # 6. PAGINATION
+    # -----------------------------
+    total_count = len(staff)
+    total_pages = max(1, math.ceil(total_count / per_page))
 
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+
+    start = (page - 1) * per_page
+    end = start + per_page
+    staff_paginated = staff[start:end]
+
+    # -----------------------------
+    # 7. TEMPLATE
+    # -----------------------------
+    return render_template(
+        'staff.html',
+        staff=staff_paginated,
+        current_page=page,
+        total_pages=total_pages,
+        filters=request.args
+    )
+
+
+# -------------------------
+# STAFF ADD
+# -------------------------
+@app.route('/staff/add', methods=['POST'])
+@login_required
+def add_staff():
+    try:
+        data = request.form
+
+        name = data.get('name')
+        role = data.get('role')
+        team_id = data.get('team_id')
+        league = data.get('league')
+        team_url = data.get('team_url')
+
+        if not team_id or team_id.strip() == "":
+            team_id = None
+
+        sql = """
+            INSERT INTO technic_roster 
+            (technic_member_name, technic_member_role, team_id, league, team_url)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+
+        db_api.execute(sql, (name, role, team_id, league, team_url))
+        flash("Teknik ekip üyesi eklendi.", "success")
+
+    except Exception as e:
+        print(f"Staff Add Error: {e}")
+        flash(f"Hata: {e}", "danger")
+
+    return redirect(url_for('staff_page'))
+
+
+# -------------------------
+# STAFF UPDATE
+# -------------------------
+@app.route('/staff/update', methods=['POST'])
+@login_required
+def update_staff():
+    try:
+        data = request.form
+
+        staff_id = data.get('staff_id')
+        name = data.get('name')
+        role = data.get('role')
+        team_id = data.get('team_id')
+        league = data.get('league')
+        team_url = data.get('team_url')
+
+        if not team_id or team_id.strip() == "":
+            team_id = None
+
+        sql = """
+            UPDATE technic_roster
+            SET technic_member_name = %s,
+                technic_member_role = %s,
+                team_id = %s,
+                league = %s,
+                team_url = %s
+            WHERE staff_id = %s
+        """
+
+        db_api.execute(sql, (name, role, team_id, league, team_url, staff_id))
+        flash("Teknik ekip üyesi güncellendi.", "success")
+
+    except Exception as e:
+        print(f"Staff Update Error: {e}")
+        flash(f"Hata: {e}", "danger")
+
+    return redirect(url_for('staff_page'))
+
+
+# -------------------------
+# STAFF DELETE
+# -------------------------
+@app.route('/staff/delete/<int:staff_id>', methods=['POST'])
+@login_required
+def delete_staff(staff_id):
+    try:
+        sql = "DELETE FROM technic_roster WHERE staff_id = %s"
+        db_api.execute(sql, (staff_id,))
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+# -------------------------
+# NUMERIC FILTER HELPER
+# -------------------------
 def parse_numeric_filter(col_name, value, where_clauses, params):
     """
     Kullanıcı girdisini analiz eder: <20, >50, >=10, 15 gibi.
     """
     if not value:
         return
-
     value = value.strip()
     operator = "=" # Varsayılan
     
