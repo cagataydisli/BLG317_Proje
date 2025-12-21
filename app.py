@@ -746,8 +746,15 @@ def matches_page():
     cities_query = "SELECT DISTINCT match_city FROM Matches WHERE match_city IS NOT NULL ORDER BY match_city"
     cities = [row[0] for row in db_api.query(cities_query)]
 
-    # Fetch unique weeks for checkbox filter
-    weeks_query = "SELECT DISTINCT match_week FROM Matches WHERE match_week IS NOT NULL ORDER BY match_week"
+    # Fetch unique weeks for checkbox filter (natural sort: NS 01, NS 02, ... NS 10, NS 11)
+    weeks_query = """
+        SELECT match_week FROM (
+            SELECT DISTINCT match_week FROM Matches WHERE match_week IS NOT NULL
+        ) w
+        ORDER BY 
+            SUBSTRING(match_week FROM '^[A-Za-z]+'),
+            CAST(NULLIF(REGEXP_REPLACE(match_week, '[^0-9]', '', 'g'), '') AS INTEGER) NULLS LAST
+    """
     all_weeks = [row[0] for row in db_api.query(weeks_query)]
 
     # NEW: Fetch unique saloons for dropdown
@@ -1555,25 +1562,20 @@ def add_match():
         data = request.form
         
         # Extract form data
-        match_id = data.get('match_id')
         home_team_id = data.get('home_team_id')
         away_team_id = data.get('away_team_id')
-        match_date = data.get('match_date')
-        match_hour = data.get('match_hour')
-        match_week = data.get('match_week')
+        match_date = data.get('match_date') or None  # Convert empty string to None
+        match_hour = data.get('match_hour') or None  # Convert empty string to None
+        match_week = data.get('match_week') or None
         league = data.get('league')
-        match_city = data.get('match_city')
-        match_saloon = data.get('match_saloon')
+        match_city = data.get('match_city') or None
+        match_saloon = data.get('match_saloon') or None
+        home_score = data.get('home_score')
+        away_score = data.get('away_score')
         
-        # Validation: Check if match_id is provided
-        if not match_id or not match_id.strip():
-            flash("Error: Match ID is required!", "danger")
-            return redirect(url_for('matches_page'))
-        
-        # Validation: Check if match_id already exists
-        existing = db_api.query("SELECT 1 FROM Matches WHERE match_id = %s", (match_id,))
-        if existing:
-            flash(f"Error: Match ID '{match_id}' already exists!", "danger")
+        # Validation: League is required
+        if not league or not league.strip():
+            flash("Error: League is required!", "danger")
             return redirect(url_for('matches_page'))
         
         # Validation: Check if home and away teams are different
@@ -1581,17 +1583,55 @@ def add_match():
             flash("Error: Home and away teams cannot be the same!", "danger")
             return redirect(url_for('matches_page'))
         
-        # SQL Insert
+        # AUTO-GENERATE match_id: Format = "1EA" + number (e.g., 1EA263, 1EA4509, 1EA10000...)
+        # Find the highest existing match_id number and increment
+        max_id_query = """
+            SELECT COALESCE(MAX(CAST(SUBSTRING(match_id FROM 4) AS INTEGER)), 4999) 
+            FROM Matches 
+            WHERE match_id ~ '^1EA[0-9]+$'
+        """
+        max_result = db_api.query(max_id_query)
+        print(f"DEBUG max_result: {max_result}")
+        
+        # Handle result - COALESCE ensures we always get a number
+        next_num = max_result[0][0] + 1
+        print(f"DEBUG next_num: {next_num}")
+        
+        # Generate match_id: "1EA" + next number
+        match_id = f"1EA{next_num}"
+        print(f"DEBUG match_id: {match_id}")
+        
+        # Ensure uniqueness (in case of conflicts)
+        existing = db_api.query("SELECT 1 FROM Matches WHERE match_id = %s", (match_id,))
+        while existing and len(existing) > 0:
+            next_num += 1
+            match_id = f"1EA{next_num}"
+            existing = db_api.query("SELECT 1 FROM Matches WHERE match_id = %s", (match_id,))
+        
+        # Handle scores: convert to int or None
+        try:
+            home_score = int(home_score) if home_score and home_score.strip() else None
+            away_score = int(away_score) if away_score and away_score.strip() else None
+            
+            # Validate: Both scores must be set or both empty
+            if (home_score is None) != (away_score is None):
+                flash("Error: Both scores must be set or both must be empty!", "danger")
+                return redirect(url_for('matches_page'))
+        except ValueError:
+            flash("Error: Scores must be valid numbers!", "danger")
+            return redirect(url_for('matches_page'))
+        
+        # SQL Insert (now includes scores)
         sql = """
             INSERT INTO Matches (
                 match_id, home_team_id, away_team_id, match_date, match_hour,
-                match_week, league, match_city, match_saloon
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                home_score, away_score, match_week, league, match_city, match_saloon
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         
         db_api.execute(sql, (
             match_id, home_team_id, away_team_id, match_date, match_hour,
-            match_week, league, match_city, match_saloon
+            home_score, away_score, match_week, league, match_city, match_saloon
         ))
         
         flash(f"Match successfully added! (ID: {match_id})", "success")

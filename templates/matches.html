@@ -776,30 +776,35 @@
             </div>
             <div class="modal-body">
                 <form action="/matches/add" method="POST">
+                    <!-- Match ID is now auto-generated -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">Match ID <span class="text-danger">*</span></label>
-                            <input type="text" name="match_id" class="form-control" required placeholder="e.g., M12345">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">League</label>
-                            <select name="league" class="form-select">
+                            <label class="form-label">League <span class="text-danger">*</span></label>
+                            <select name="league" id="add_league" class="form-select" required onchange="updateTeamDropdowns()">
                                 <option value="">Select League</option>
                                 {% for league in leagues %}<option value="{{ league }}">{{ league }}</option>{% endfor %}
+                            </select>
+                            <small class="text-muted">Match ID will be auto-generated</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Week <span class="text-danger">*</span></label>
+                            <select name="match_week" class="form-select" required>
+                                <option value="">Select Week</option>
+                                {% for week in all_weeks %}<option value="{{ week }}">{{ week }}</option>{% endfor %}
                             </select>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">🏠 Home Team <span class="text-danger">*</span></label>
-                            <select name="home_team_id" class="form-select" required>
+                            <select name="home_team_id" id="add_home_team" class="form-select" required>
                                 <option value="">Select Home Team</option>
                                 {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">✈️ Away Team <span class="text-danger">*</span></label>
-                            <select name="away_team_id" class="form-select" required>
+                            <select name="away_team_id" id="add_away_team" class="form-select" required>
                                 <option value="">Select Away Team</option>
                                 {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
                             </select>
@@ -807,26 +812,40 @@
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-4">
-                            <label class="form-label">Date</label>
-                            <input type="date" name="match_date" class="form-control">
+                            <label class="form-label">Date <span class="text-danger">*</span></label>
+                            <input type="date" name="match_date" class="form-control" required>
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Time</label>
                             <input type="time" name="match_hour" class="form-control">
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label">Week</label>
-                            <input type="text" name="match_week" class="form-control" placeholder="NS 01">
+                            <label class="form-label">City <span class="text-danger">*</span></label>
+                            <select name="match_city" class="form-select" required>
+                                <option value="">Select City</option>
+                                {% for city in cities %}<option value="{{ city }}">{{ city }}</option>{% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Arena</label>
+                            <select name="match_saloon" class="form-select">
+                                <option value="">Select Arena (Optional)</option>
+                                {% for saloon in all_saloons %}<option value="{{ saloon }}">{{ saloon }}</option>{% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <hr>
+                    <p class="text-muted small">💡 <strong>Scores are optional.</strong> Leave empty if match hasn't been played yet.</p>
+                    <div class="row mb-3">
                         <div class="col-md-6">
-                            <label class="form-label">City</label>
-                            <input type="text" name="match_city" class="form-control" placeholder="İSTANBUL">
+                            <label class="form-label text-success fw-bold">🏠 Home Score</label>
+                            <input type="number" name="home_score" class="form-control border-success" min="0" max="300" placeholder="Leave empty if not played">
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Arena</label>
-                            <input type="text" name="match_saloon" class="form-control">
+                            <label class="form-label text-danger fw-bold">✈️ Away Score</label>
+                            <input type="number" name="away_score" class="form-control border-danger" min="0" max="300" placeholder="Leave empty if not played">
                         </div>
                     </div>
                     <button type="submit" class="btn btn-success w-100">✅ Add Match</button>
@@ -898,11 +917,17 @@
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">City</label>
-                            <input type="text" name="match_city" id="edit_match_city" class="form-control">
+                            <select name="match_city" id="edit_match_city" class="form-select">
+                                <option value="">Select City</option>
+                                {% for city in cities %}<option value="{{ city }}">{{ city }}</option>{% endfor %}
+                            </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">Arena</label>
-                            <input type="text" name="match_saloon" id="edit_match_saloon" class="form-control">
+                            <select name="match_saloon" id="edit_match_saloon" class="form-select">
+                                <option value="">Select Arena</option>
+                                {% for saloon in all_saloons %}<option value="{{ saloon }}">{{ saloon }}</option>{% endfor %}
+                            </select>
                         </div>
                     </div>
                     <button type="submit" class="btn btn-warning w-100">💾 Save Changes</button>
