@@ -798,15 +798,13 @@
                         <div class="col-md-6">
                             <label class="form-label">🏠 Home Team <span class="text-danger">*</span></label>
                             <select name="home_team_id" id="add_home_team" class="form-select" required>
-                                <option value="">Select Home Team</option>
-                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
+                                <option value="">Select League First</option>
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">✈️ Away Team <span class="text-danger">*</span></label>
                             <select name="away_team_id" id="add_away_team" class="form-select" required>
-                                <option value="">Select Away Team</option>
-                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
+                                <option value="">Select League First</option>
                             </select>
                         </div>
                     </div>
@@ -821,7 +819,7 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">City <span class="text-danger">*</span></label>
-                            <select name="match_city" class="form-select" required>
+                            <select name="match_city" id="add_city" class="form-select" required>
                                 <option value="">Select City</option>
                                 {% for city in cities %}<option value="{{ city }}">{{ city }}</option>{% endfor %}
                             </select>
@@ -830,7 +828,7 @@
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label class="form-label">Arena</label>
-                            <select name="match_saloon" class="form-select">
+                            <select name="match_saloon" id="add_saloon" class="form-select">
                                 <option value="">Select Arena (Optional)</option>
                                 {% for saloon in all_saloons %}<option value="{{ saloon }}">{{ saloon }}</option>{% endfor %}
                             </select>
@@ -873,20 +871,23 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">League</label>
-                            <input type="text" name="league" id="edit_league" class="form-control">
+                            <select name="league" id="edit_league" class="form-select">
+                                <option value="">Select League</option>
+                                {% for league in leagues %}<option value="{{ league }}">{{ league }}</option>{% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">🏠 Home Team</label>
                             <select name="home_team_id" id="edit_home_team_id" class="form-select" required>
-                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
+                                <option value="">Select Team</option>
                             </select>
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">✈️ Away Team</label>
                             <select name="away_team_id" id="edit_away_team_id" class="form-select" required>
-                                {% for team in teams %}<option value="{{ team.team_id }}">{{ team.team_name }}</option>{% endfor %}
+                                <option value="">Select Team</option>
                             </select>
                         </div>
                     </div>
@@ -901,7 +902,10 @@
                         </div>
                         <div class="col-md-4">
                             <label class="form-label">Week</label>
-                            <input type="text" name="match_week" id="edit_match_week" class="form-control">
+                            <select name="match_week" id="edit_match_week" class="form-select">
+                                <option value="">Select Week</option>
+                                {% for week in all_weeks %}<option value="{{ week }}">{{ week }}</option>{% endfor %}
+                            </select>
                         </div>
                     </div>
                     <div class="row mb-3">
@@ -966,20 +970,119 @@
         }
     }
 
+    // Store all teams data for filtering
+    const allTeams = [
+        {% for team in teams %}
+        { id: {{ team.team_id }}, name: "{{ team.team_name }}", league: "{{ team.league }}" },
+        {% endfor %}
+    ];
+
+    // Store all saloons with cities for filtering
+    const allCitySaloons = [
+        {% for s in saloons_with_cities %}
+        { city: "{{ s.city }}", saloon: "{{ s.saloon }}" },
+        {% endfor %}
+    ];
+
+    // Filter teams by league and populate dropdown
+    function filterTeamsByLeague(selectId, selectedLeague, selectedTeamId) {
+        const select = document.getElementById(selectId);
+        const currentValue = selectedTeamId || select.value;
+        
+        // Clear existing options
+        select.innerHTML = '<option value="">Select Team</option>';
+        
+        // Filter teams by league
+        const filteredTeams = selectedLeague 
+            ? allTeams.filter(t => t.league === selectedLeague)
+            : allTeams;
+        
+        // Add filtered options
+        filteredTeams.forEach(team => {
+            const option = document.createElement('option');
+            option.value = team.id;
+            option.textContent = team.name;
+            if (team.id == currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+    }
+
+    // Filter saloons by city and populate dropdown
+    function filterSaloonsByCity(selectId, selectedCity, selectedSaloon) {
+        const select = document.getElementById(selectId);
+        const currentValue = selectedSaloon || select.value;
+        
+        // Clear existing options
+        select.innerHTML = '<option value="">Select Saloon (optional)</option>';
+        
+        // Filter saloons by city
+        const filteredSaloons = selectedCity 
+            ? allCitySaloons.filter(s => s.city === selectedCity)
+            : allCitySaloons;
+        
+        // Get unique saloons
+        const uniqueSaloons = [...new Set(filteredSaloons.map(s => s.saloon))];
+        
+        // Add filtered options
+        uniqueSaloons.forEach(saloon => {
+            const option = document.createElement('option');
+            option.value = saloon;
+            option.textContent = saloon;
+            if (saloon === currentValue) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+    }
+
+    // Update team dropdowns when league changes in Edit modal
+    document.getElementById('edit_league').addEventListener('change', function() {
+        const league = this.value;
+        filterTeamsByLeague('edit_home_team_id', league);
+        filterTeamsByLeague('edit_away_team_id', league);
+    });
+
+    // Update saloon dropdown when city changes in Edit modal
+    document.getElementById('edit_match_city').addEventListener('change', function() {
+        const city = this.value;
+        filterSaloonsByCity('edit_match_saloon', city);
+    });
+
+    // Update team dropdowns when league changes in Add modal
+    document.getElementById('add_league').addEventListener('change', function() {
+        const league = this.value;
+        filterTeamsByLeague('add_home_team', league);
+        filterTeamsByLeague('add_away_team', league);
+    });
+
+    // Update saloon dropdown when city changes in Add modal
+    document.getElementById('add_city').addEventListener('change', function() {
+        const city = this.value;
+        filterSaloonsByCity('add_saloon', city);
+    });
+
     function editMatch(matchId, homeTeamId, awayTeamId, matchDate, matchHour, homeScore, awayScore, matchWeek, league, matchCity, matchSaloon) {
         document.getElementById('edit_match_id').value = matchId;
         document.getElementById('edit_match_id_display').value = matchId;
-        document.getElementById('edit_home_team_id').value = homeTeamId;
-        document.getElementById('edit_away_team_id').value = awayTeamId;
+        document.getElementById('edit_league').value = league;
+        
+        // Filter teams by league first, then set selected values
+        filterTeamsByLeague('edit_home_team_id', league, homeTeamId);
+        filterTeamsByLeague('edit_away_team_id', league, awayTeamId);
+        
         document.getElementById('edit_match_date').value = matchDate;
         document.getElementById('edit_match_hour').value = matchHour;
         // FIXED: Handle both null and string "null"
         document.getElementById('edit_home_score').value = (homeScore !== null && homeScore !== 'null' && homeScore !== undefined) ? homeScore : '';
         document.getElementById('edit_away_score').value = (awayScore !== null && awayScore !== 'null' && awayScore !== undefined) ? awayScore : '';
         document.getElementById('edit_match_week').value = matchWeek;
-        document.getElementById('edit_league').value = league;
         document.getElementById('edit_match_city').value = matchCity;
-        document.getElementById('edit_match_saloon').value = matchSaloon;
+        
+        // Filter saloons by city first, then set selected value
+        filterSaloonsByCity('edit_match_saloon', matchCity, matchSaloon);
+        
         new bootstrap.Modal(document.getElementById('editMatchModal')).show();
     }
 

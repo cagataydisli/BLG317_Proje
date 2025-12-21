@@ -728,15 +728,15 @@ def matches_page():
     order = 'DESC' if order.lower() == 'desc' else 'ASC'
     
     # ==================== DROPDOWN DATA ====================
-    # Fetch teams for dropdowns (get unique team names with their first team_id)
+    # Fetch ALL teams for dropdowns (need all team_ids for edit modal to work correctly)
+    # Teams with same name but different seasons have different IDs
     teams_query = """
-        SELECT MIN(team_id) as team_id, team_name
+        SELECT team_id, team_name, league
         FROM Teams
-        GROUP BY team_name
-        ORDER BY team_name
+        ORDER BY team_name, league DESC
     """
     teams_rows = db_api.query(teams_query)
-    teams = [{'team_id': row[0], 'team_name': row[1]} for row in teams_rows]
+    teams = [{'team_id': row[0], 'team_name': row[1], 'league': row[2]} for row in teams_rows]
 
     # Fetch unique leagues for filter
     leagues_query = "SELECT DISTINCT league FROM Matches WHERE league IS NOT NULL ORDER BY league DESC"
@@ -757,9 +757,15 @@ def matches_page():
     """
     all_weeks = [row[0] for row in db_api.query(weeks_query)]
 
-    # NEW: Fetch unique saloons for dropdown
-    saloons_query = "SELECT DISTINCT match_saloon FROM Matches WHERE match_saloon IS NOT NULL AND match_saloon != '' ORDER BY match_saloon"
-    all_saloons = [row[0] for row in db_api.query(saloons_query)]
+    # NEW: Fetch saloons with their cities for filtering
+    saloons_query = """
+        SELECT DISTINCT match_city, match_saloon 
+        FROM Matches 
+        WHERE match_saloon IS NOT NULL AND match_saloon != '' AND match_city IS NOT NULL
+        ORDER BY match_city, match_saloon
+    """
+    saloons_with_cities = [{'city': row[0], 'saloon': row[1]} for row in db_api.query(saloons_query)]
+    all_saloons = list(set([s['saloon'] for s in saloons_with_cities]))  # Unique saloons for backward compat
     
     # ==================== DYNAMIC WHERE CLAUSE ====================
     where_clauses = ["1=1"]
@@ -1533,6 +1539,7 @@ def matches_page():
         cities=cities,
         all_weeks=all_weeks,
         all_saloons=all_saloons,
+        saloons_with_cities=saloons_with_cities,
         # Selected filter values (to maintain state)
         selected_league=selected_league,
         selected_city=selected_city,
@@ -1649,18 +1656,18 @@ def update_match():
     try:
         data = request.form
         
-        # Extract form data
+        # Extract form data (convert empty strings to None for SQL NULL)
         match_id = data.get('match_id')
         home_team_id = data.get('home_team_id')
         away_team_id = data.get('away_team_id')
-        match_date = data.get('match_date')
-        match_hour = data.get('match_hour')
+        match_date = data.get('match_date') or None
+        match_hour = data.get('match_hour') or None
         home_score = data.get('home_score')
         away_score = data.get('away_score')
-        match_week = data.get('match_week')
-        league = data.get('league')
-        match_city = data.get('match_city')
-        match_saloon = data.get('match_saloon')
+        match_week = data.get('match_week') or None
+        league = data.get('league') or None
+        match_city = data.get('match_city') or None
+        match_saloon = data.get('match_saloon') or None
         
         # Validation: Teams cannot be the same
         if home_team_id == away_team_id:
