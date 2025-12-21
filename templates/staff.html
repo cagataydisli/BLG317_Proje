@@ -98,8 +98,8 @@
                     <button class="btn btn-light btn-sm me-2" onclick="toggleEditMode()">
                         ✏️ Edit Mode
                     </button>
-                    <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm" onclick="return confirm('Çıkış yapmak istediğinize emin misiniz?')">
-                        🚪 Çıkış Yap
+                    <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm" onclick="return confirm('Are you sure to log-out?')">
+                        🚪 Logout
                     </a>
                 {% else %}
                     <a href="{{ url_for('login') }}" class="btn btn-light">
