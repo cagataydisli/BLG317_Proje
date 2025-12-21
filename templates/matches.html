@@ -288,15 +288,15 @@
         </div>
         <ul class="pagination pagination-sm mb-0">
             <li class="page-item {% if current_page == 1 %}disabled{% endif %}">
-                <a class="page-link" href="?page={{ current_page - 1 }}{% for key, value in request.args.items() if key != 'page' %}&{{ key }}={{ value }}{% endfor %}">‹</a>
+                <a class="page-link" href="?page={{ current_page - 1 }}{%- for key in request.args.keys() if key != 'page' -%}{%- if request.args.getlist(key)|length > 1 -%}{%- for val in request.args.getlist(key) -%}&{{ key }}={{ val }}{%- endfor -%}{%- else -%}&{{ key }}={{ request.args.get(key) }}{%- endif -%}{%- endfor -%}">‹</a>
             </li>
             {% for p in range([1, current_page - 2]|max, [total_pages, current_page + 2]|min + 1) %}
                 <li class="page-item {% if p == current_page %}active{% endif %}">
-                    <a class="page-link" href="?page={{ p }}{% for key, value in request.args.items() if key != 'page' %}&{{ key }}={{ value }}{% endfor %}">{{ p }}</a>
+                    <a class="page-link" href="?page={{ p }}{%- for key in request.args.keys() if key != 'page' -%}{%- if request.args.getlist(key)|length > 1 -%}{%- for val in request.args.getlist(key) -%}&{{ key }}={{ val }}{%- endfor -%}{%- else -%}&{{ key }}={{ request.args.get(key) }}{%- endif -%}{%- endfor -%}">{{ p }}</a>
                 </li>
             {% endfor %}
             <li class="page-item {% if current_page == total_pages %}disabled{% endif %}">
-                <a class="page-link" href="?page={{ current_page + 1 }}{% for key, value in request.args.items() if key != 'page' %}&{{ key }}={{ value }}{% endfor %}">›</a>
+                <a class="page-link" href="?page={{ current_page + 1 }}{%- for key in request.args.keys() if key != 'page' -%}{%- if request.args.getlist(key)|length > 1 -%}{%- for val in request.args.getlist(key) -%}&{{ key }}={{ val }}{%- endfor -%}{%- else -%}&{{ key }}={{ request.args.get(key) }}{%- endif -%}{%- endfor -%}">›</a>
             </li>
         </ul>
     </nav>
@@ -305,13 +305,15 @@
     <!-- ==================== ANALYTICS SECTION ==================== -->
     <div class="row">
         <!-- Team Performance Rankings -->
-        {% if analytics %}
         <div class="col-lg-6 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">🏀 Team Performance Rankings <small class="text-muted">({{ analytics_display_season }})</small></h6>
+                    {% if analytics and analytics|length > 0 %}
                     <span class="badge bg-secondary">{{ analytics|length }} teams</span>
+                    {% endif %}
                 </div>
+                {% if analytics and analytics|length > 0 %}
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                         <table class="table table-sm table-hover mb-0">
@@ -358,18 +360,25 @@
                 <div class="card-footer bg-white text-muted small">
                     🟢 Top 3 | 🔴 Bottom 3 | Use season filter to change
                 </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <h5>📊 No Analytics Available</h5>
+                    <p class="mb-0">Teams need at least 3 games with scores for statistics.<br>Try selecting a different league or removing filters.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
 
-        <!-- Recent High Scoring Games -->
-        {% if nested_data %}
+        <!-- Above-Average Home Performances -->
         <div class="col-lg-6 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
-                    <h6 class="mb-0">🔥 High Scoring Games</h6>
+                    <h6 class="mb-0">🏠 Above-Average Home Performances</h6>
+                    {% if nested_data and nested_data|length > 0 %}
                     <span class="badge bg-warning text-dark">{{ nested_data|length }} games</span>
+                    {% endif %}
                 </div>
+                {% if nested_data and nested_data|length > 0 %}
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
                         <table class="table table-sm table-hover mb-0">
@@ -399,23 +408,30 @@
                     </div>
                 </div>
                 <div class="card-footer bg-white text-muted small">
-                    Home teams with exceptional offensive performance
+                    Home teams scoring above league average
                 </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <h5>🏀 No Data Available</h5>
+                    <p class="mb-0">No home team performances above average found.<br>Try selecting a different league.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
     </div>
 
     <!-- Second Row of Analytics -->
     <div class="row">
         <!-- Recent Wins -->
-        {% if set_operation_data %}
         <div class="col-lg-6 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">🏅 Recent Wins</h6>
+                    {% if set_operation_data and set_operation_data|length > 0 %}
                     <span class="badge bg-info">{{ set_operation_data|length }} wins</span>
+                    {% endif %}
                 </div>
+                {% if set_operation_data and set_operation_data|length > 0 %}
                 <div class="card-body p-0" style="max-height: 350px; overflow-y: auto;">
                     <ul class="list-group list-group-flush">
                         {% for row in set_operation_data %}
@@ -436,18 +452,25 @@
                 <div class="card-footer bg-white text-muted small">
                     Latest victories at home and on the road
                 </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <h5>🏆 No Wins Recorded</h5>
+                    <p class="mb-0">No victories found for this league.<br>Check that games have scores entered.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
 
         <!-- Head to Head -->
-        {% if h2h_data %}
         <div class="col-lg-6 mb-4">
             <div class="card h-100 shadow-sm border-0">
                 <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
                     <h6 class="mb-0">🥊 Head-to-Head Rivalries</h6>
+                    {% if h2h_data and h2h_data|length > 0 %}
                     <span class="badge bg-danger">{{ h2h_data|length }} matchups</span>
+                    {% endif %}
                 </div>
+                {% if h2h_data and h2h_data|length > 0 %}
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
                         <table class="table table-sm table-hover mb-0">
@@ -482,9 +505,14 @@
                 <div class="card-footer bg-white text-muted small">
                     Frequent opponents with 2+ meetings
                 </div>
+                {% else %}
+                <div class="card-body text-center text-muted py-5">
+                    <h5>🥊 No Rivalries Found</h5>
+                    <p class="mb-0">No teams have played each other 2+ times.<br>Data may be limited for this league.</p>
+                </div>
+                {% endif %}
             </div>
         </div>
-        {% endif %}
     </div>
 </div>
 
@@ -670,8 +698,9 @@
         document.getElementById('edit_away_team_id').value = awayTeamId;
         document.getElementById('edit_match_date').value = matchDate;
         document.getElementById('edit_match_hour').value = matchHour;
-        document.getElementById('edit_home_score').value = homeScore !== null ? homeScore : '';
-        document.getElementById('edit_away_score').value = awayScore !== null ? awayScore : '';
+        // FIXED: Handle both null and string "null"
+        document.getElementById('edit_home_score').value = (homeScore !== null && homeScore !== 'null' && homeScore !== undefined) ? homeScore : '';
+        document.getElementById('edit_away_score').value = (awayScore !== null && awayScore !== 'null' && awayScore !== undefined) ? awayScore : '';
         document.getElementById('edit_match_week').value = matchWeek;
         document.getElementById('edit_league').value = league;
         document.getElementById('edit_match_city').value = matchCity;
@@ -691,5 +720,12 @@
             }
         });
     }
+
+    // ADDED: Loading state for filter form
+    document.getElementById('filterForm').addEventListener('submit', function(e) {
+        const btn = this.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading...';
+    });
 </script>
 {% endblock %}

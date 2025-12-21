@@ -63,7 +63,32 @@ CREATE TABLE technic_roster (
     technic_member_name VARCHAR(100) NOT NULL,
     technic_member_role VARCHAR(100)
 );
-ALTER TABLE Teams 
-ADD CONSTRAINT fk_teams_staff 
+ALTER TABLE Teams
+ADD CONSTRAINT fk_teams_staff
 FOREIGN KEY (staff_id) REFERENCES technic_roster(staff_id)
 ON DELETE SET NULL;
+
+-- =========================
+-- PERFORMANCE INDEXES
+-- =========================
+
+-- Matches table indexes for faster queries
+CREATE INDEX idx_matches_home_team ON Matches(home_team_id);
+CREATE INDEX idx_matches_away_team ON Matches(away_team_id);
+CREATE INDEX idx_matches_league ON Matches(league);
+CREATE INDEX idx_matches_date ON Matches(match_date);
+CREATE INDEX idx_matches_city ON Matches(match_city);
+CREATE INDEX idx_matches_week ON Matches(match_week);
+
+-- Composite index for deduplication queries (critical for performance)
+CREATE INDEX idx_matches_dedup ON Matches(match_date, home_team_id, away_team_id);
+
+-- Index for score-based queries
+CREATE INDEX idx_matches_scores ON Matches(home_score, away_score) WHERE home_score IS NOT NULL;
+
+-- Teams table index
+CREATE INDEX idx_teams_name ON Teams(team_name);
+CREATE INDEX idx_teams_league ON Teams(league);
+
+-- Technic roster index
+CREATE INDEX idx_technic_team ON technic_roster(team_id);

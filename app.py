@@ -662,11 +662,17 @@ def matches_page():
     min_score_diff = request.args.get('min_score_diff', '')
     selected_weeks = request.args.getlist('weeks')  # Checkbox multi-select
     
-    # SQL injection protection
-    allowed_cols = ['match_date', 'match_week', 'league', 'match_city', 'home_score', 'away_score']
-    if sort_by not in allowed_cols:
-        sort_by = 'match_date'
-    order = 'desc' if order not in ['asc', 'desc'] else order
+    # SQL injection protection - use mapping for complete control
+    SORT_COLUMNS = {
+        'match_date': 'm.match_date',
+        'match_week': 'm.match_week',
+        'league': 'm.league',
+        'match_city': 'm.match_city',
+        'home_score': 'm.home_score',
+        'away_score': 'm.away_score'
+    }
+    sort_column = SORT_COLUMNS.get(sort_by, 'm.match_date')
+    order = 'DESC' if order.lower() == 'desc' else 'ASC'
     
     # ==================== DROPDOWN DATA ====================
     # Fetch teams for dropdowns
@@ -776,7 +782,7 @@ def matches_page():
         JOIN teams t1 ON m.home_team_id = t1.team_id
         JOIN teams t2 ON m.away_team_id = t2.team_id
         WHERE {where_sql}
-        ORDER BY m.{sort_by} {order}, m.match_hour ASC
+        ORDER BY {sort_column} {order}, m.match_hour ASC
         LIMIT %s OFFSET %s
     """
     query_params = tuple(params) + (per_page, offset)
@@ -789,25 +795,42 @@ def matches_page():
     
     # ==================== COMPLEX QUERY 1: Team Performance (GROUP BY + HAVING + Aggregations) ====================
     # Real-world meaningful stat: Team performance summary with wins, losses, averages
-    # Use the selected league filter, or default to current season
-    analytics_league = selected_league if selected_league else 'bsl-2024-2025'
+    # Use the selected league filter, or auto-detect from filtered matches
+    if selected_league:
+        analytics_league = selected_league
+    else:
+        # Auto-detect most common league from current filter results
+        league_detect_query = f"""
+            SELECT m.league, COUNT(*) as cnt
+            FROM matches m
+            JOIN teams t1 ON m.home_team_id = t1.team_id
+            JOIN teams t2 ON m.away_team_id = t2.team_id
+            WHERE {where_sql}
+            GROUP BY m.league
+            ORDER BY cnt DESC
+            LIMIT 1
+        """
+        league_result = db_api.query(league_detect_query, tuple(params))
+        analytics_league = league_result[0][0] if league_result else 'bsl-2024-2025'
+
     analytics_display_season = analytics_league.replace('bsl-', '').upper() if analytics_league else 'All Seasons'
-    
+
     analytics_query = """
         WITH ranked_matches AS (
+            -- FIXED: Deduplicate by team IDs instead of scores to prevent data loss
             -- Each match appears twice in data with swapped home/away teams
-            -- Keep only the first one (lower match_id) per date + score combination
-            SELECT 
+            -- Keep only the first one based on team_id pair + date
+            SELECT
                 m.match_id,
                 m.match_date,
-                m.home_score, 
-                m.away_score, 
-                m.home_team_id, 
+                m.home_score,
+                m.away_score,
+                m.home_team_id,
                 m.away_team_id,
                 ROW_NUMBER() OVER (
-                    PARTITION BY m.match_date, 
-                                 LEAST(m.home_score, m.away_score), 
-                                 GREATEST(m.home_score, m.away_score)
+                    PARTITION BY m.match_date,
+                                 LEAST(m.home_team_id, m.away_team_id),
+                                 GREATEST(m.home_team_id, m.away_team_id)
                     ORDER BY m.match_id
                 ) as rn
             FROM Matches m
@@ -922,12 +945,14 @@ def matches_page():
         complex_join_data = []
     
     # ==================== COMPLEX QUERY 3: NESTED SUBQUERY ====================
-    # Find matches where home team scored above league average
+    # Find matches with above-average home team performance
     nested_subquery = """
         WITH ranked_matches AS (
-            SELECT m.*, 
+            SELECT m.*,
                    ROW_NUMBER() OVER (
-                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
                        ORDER BY m.match_id
                    ) as rn
             FROM Matches m
@@ -939,13 +964,14 @@ def matches_page():
         league_avg AS (
             SELECT AVG(home_score) as avg_score FROM unique_matches
         )
-        SELECT 
+        SELECT
             m.match_id,
             t1.team_name AS home_team,
             t2.team_name AS away_team,
             m.home_score,
             m.away_score,
-            m.match_date
+            m.match_date,
+            la.avg_score
         FROM unique_matches m
         JOIN Teams t1 ON m.home_team_id = t1.team_id
         JOIN Teams t2 ON m.away_team_id = t2.team_id
@@ -973,9 +999,11 @@ def matches_page():
     # Some teams may have registered but not played all their matches
     outer_join_query = """
         WITH ranked_matches AS (
-            SELECT m.*, 
+            SELECT m.*,
                    ROW_NUMBER() OVER (
-                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
                        ORDER BY m.match_id
                    ) as rn
             FROM Matches m
@@ -1021,9 +1049,11 @@ def matches_page():
     # Teams that won at home UNION Teams that won away
     set_operation_query = """
         WITH ranked_matches AS (
-            SELECT m.*, 
+            SELECT m.*,
                    ROW_NUMBER() OVER (
-                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
                        ORDER BY m.match_id
                    ) as rn
             FROM Matches m
@@ -1031,24 +1061,24 @@ def matches_page():
         ),
         unique_matches AS (
             SELECT * FROM ranked_matches WHERE rn = 1
-        )
-        (
+        ),
+        home_wins AS (
             SELECT DISTINCT t.team_name, 'Home Win' AS win_type, m.match_date
             FROM unique_matches m
             JOIN Teams t ON m.home_team_id = t.team_id
             WHERE m.home_score > m.away_score
-            ORDER BY m.match_date DESC
-            LIMIT 10
-        )
-        UNION ALL
-        (
+        ),
+        away_wins AS (
             SELECT DISTINCT t.team_name, 'Away Win' AS win_type, m.match_date
             FROM unique_matches m
             JOIN Teams t ON m.away_team_id = t.team_id
             WHERE m.away_score > m.home_score
-            ORDER BY m.match_date DESC
-            LIMIT 10
         )
+        SELECT * FROM (
+            SELECT * FROM home_wins
+            UNION ALL
+            SELECT * FROM away_wins
+        ) combined
         ORDER BY match_date DESC
         LIMIT 20
     """
@@ -1064,11 +1094,14 @@ def matches_page():
         set_operation_data = []
     
     # ==================== HEAD-TO-HEAD STATISTICS ====================
+    # FIXED: Normalize team pairs to avoid duplicate rivalries
     h2h_query = """
         WITH ranked_matches AS (
-            SELECT m.*, 
+            SELECT m.*,
                    ROW_NUMBER() OVER (
-                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
                        ORDER BY m.match_id
                    ) as rn
             FROM Matches m
@@ -1076,20 +1109,39 @@ def matches_page():
         ),
         unique_matches AS (
             SELECT * FROM ranked_matches WHERE rn = 1
+        ),
+        all_matchups AS (
+            SELECT
+                CASE WHEN t1.team_name < t2.team_name THEN t1.team_name ELSE t2.team_name END AS team1,
+                CASE WHEN t1.team_name < t2.team_name THEN t2.team_name ELSE t1.team_name END AS team2,
+                CASE
+                    WHEN t1.team_name < t2.team_name THEN
+                        CASE WHEN m.home_score > m.away_score THEN 1 ELSE 0 END
+                    ELSE
+                        CASE WHEN m.away_score > m.home_score THEN 1 ELSE 0 END
+                END AS team1_won,
+                CASE
+                    WHEN t1.team_name < t2.team_name THEN
+                        CASE WHEN m.home_score < m.away_score THEN 1 ELSE 0 END
+                    ELSE
+                        CASE WHEN m.away_score < m.home_score THEN 1 ELSE 0 END
+                END AS team2_won,
+                CASE WHEN m.home_score = m.away_score THEN 1 ELSE 0 END AS is_draw
+            FROM unique_matches m
+            JOIN Teams t1 ON m.home_team_id = t1.team_id
+            JOIN Teams t2 ON m.away_team_id = t2.team_id
         )
-        SELECT 
-            t1.team_name AS team1,
-            t2.team_name AS team2,
+        SELECT
+            team1,
+            team2,
             COUNT(*) AS total_games,
-            SUM(CASE WHEN m.home_score > m.away_score THEN 1 ELSE 0 END) AS team1_wins,
-            SUM(CASE WHEN m.home_score < m.away_score THEN 1 ELSE 0 END) AS team2_wins,
-            SUM(CASE WHEN m.home_score = m.away_score THEN 1 ELSE 0 END) AS draws
-        FROM unique_matches m
-        JOIN Teams t1 ON m.home_team_id = t1.team_id
-        JOIN Teams t2 ON m.away_team_id = t2.team_id
-        GROUP BY t1.team_name, t2.team_name
+            SUM(team1_won) AS team1_wins,
+            SUM(team2_won) AS team2_wins,
+            SUM(is_draw) AS draws
+        FROM all_matchups
+        GROUP BY team1, team2
         HAVING COUNT(*) >= 2
-        ORDER BY total_games DESC
+        ORDER BY total_games DESC, team1_wins DESC
         LIMIT 20
     """
     try:
@@ -1116,24 +1168,32 @@ def matches_page():
     # ==================== QUICK STATS FOR DASHBOARD ====================
     quick_stats_query = """
         WITH ranked_matches AS (
-            SELECT m.*, 
+            SELECT m.*,
                    ROW_NUMBER() OVER (
-                       PARTITION BY m.match_date, LEAST(m.home_score, m.away_score), GREATEST(m.home_score, m.away_score)
+                       PARTITION BY m.match_date,
+                                    LEAST(m.home_team_id, m.away_team_id),
+                                    GREATEST(m.home_team_id, m.away_team_id)
                        ORDER BY m.match_id
                    ) as rn
             FROM Matches m
             WHERE m.league = %s AND m.home_score IS NOT NULL AND m.away_score IS NOT NULL
+        ),
+        unique_matches AS (
+            SELECT * FROM ranked_matches WHERE rn = 1
         )
-        SELECT 
+        SELECT
             COUNT(*) AS total_matches,
             COUNT(CASE WHEN home_score > away_score THEN 1 END) AS home_wins,
             COUNT(CASE WHEN home_score < away_score THEN 1 END) AS away_wins,
             COUNT(CASE WHEN home_score = away_score THEN 1 END) AS draws,
             ROUND(AVG(home_score + away_score)::numeric, 1) AS avg_total_score,
             MAX(home_score + away_score) AS highest_score,
-            COUNT(DISTINCT home_team_id) + COUNT(DISTINCT away_team_id) AS unique_teams
-        FROM ranked_matches
-        WHERE rn = 1
+            (SELECT COUNT(DISTINCT team_id) FROM (
+                SELECT home_team_id AS team_id FROM unique_matches
+                UNION
+                SELECT away_team_id AS team_id FROM unique_matches
+            ) t) AS unique_teams
+        FROM unique_matches
     """
     try:
         stats_row = db_api.query(quick_stats_query, (analytics_league,))[0]
@@ -1264,7 +1324,12 @@ def update_match():
         try:
             home_score = int(home_score) if home_score and home_score.strip() else None
             away_score = int(away_score) if away_score and away_score.strip() else None
-            
+
+            # VALIDATION: Both scores must be set or both must be empty (consistency check)
+            if (home_score is None) != (away_score is None):
+                flash("Error: Both scores must be set or both must be empty!", "danger")
+                return redirect(url_for('matches_page'))
+
             # Validate scores are non-negative
             if home_score is not None and home_score < 0:
                 flash("Error: Home score cannot be negative!", "danger")
@@ -1272,7 +1337,7 @@ def update_match():
             if away_score is not None and away_score < 0:
                 flash("Error: Away score cannot be negative!", "danger")
                 return redirect(url_for('matches_page'))
-            
+
             # Validate reasonable score range (basketball typically 0-200)
             if home_score is not None and home_score > 300:
                 flash("Error: Home score seems unrealistic (>300)!", "danger")

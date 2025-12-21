@@ -410,6 +410,35 @@ def init_db():
     except Exception as e:
         print(f"[init_db] Migration Error: {e}")
 
+    # --- PERFORMANCE INDEXES ---
+    try:
+        print("[init_db] Creating performance indexes...")
+
+        # Matches table indexes (7 indexes)
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_home_team ON Matches(home_team_id);")
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_away_team ON Matches(away_team_id);")
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_league ON Matches(league);")
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_date ON Matches(match_date);")
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_city ON Matches(match_city);")
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_week ON Matches(match_week);")
+
+        # Composite index for deduplication (critical for performance)
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_dedup ON Matches(match_date, home_team_id, away_team_id);")
+
+        # Partial index for score-based queries
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_matches_scores ON Matches(home_score, away_score) WHERE home_score IS NOT NULL;")
+
+        # Teams table indexes (2 indexes)
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_teams_name ON Teams(team_name);")
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_teams_league ON Teams(league);")
+
+        # Technic roster index (1 index)
+        db_api.execute("CREATE INDEX IF NOT EXISTS idx_technic_team ON technic_roster(team_id);")
+
+        print("[init_db] ✅ Performance indexes created successfully! (12 indexes total)")
+    except Exception as e:
+        print(f"[init_db] Warning: Could not create all indexes. Reason: {e}")
+
 if __name__ == "__main__":
     init_db()
     print("Database initialization finished.")
