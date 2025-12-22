@@ -627,12 +627,15 @@ def update_team():
                 team_city = %s,
                 team_year = %s,
                 team_url = %s,
-                staff_id = %s,
+                staff_id = COALESCE(%s, staff_id),
                 saloon_name = %s,
                 saloon_capacity = %s,
                 saloon_address = %s
             WHERE team_id = %s
         """
+
+        staff_id = data.get('staff_id')
+        staff_id = int(staff_id) if staff_id and staff_id.strip() else None
 
         db_api.execute(sql, (
             data.get('team_name'),
@@ -640,7 +643,7 @@ def update_team():
             data.get('team_city'),
             data.get('team_year') or None,
             data.get('team_url'),
-            data.get('staff_id') or None,
+            staff_id,
             data.get('saloon_name'),
             data.get('saloon_capacity') or None,
             data.get('saloon_address'),
@@ -654,6 +657,7 @@ def update_team():
         flash("Takım güncellenirken hata oluştu.", "danger")
 
     return redirect(url_for('teams_table_page'))
+
 
 
 # =====================================================================
