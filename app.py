@@ -304,20 +304,45 @@ def players_stats_page():
 
     # 1. En Skorer Takımın Oyuncuları (Nested)
     q1 = """
-        SELECT player_name, team_name, player_height 
-        FROM Players 
-        WHERE team_id = (
-            SELECT team_id FROM standings ORDER BY team_points_scored DESC LIMIT 1
+        SELECT 
+            p.player_name, 
+            COALESCE(t.team_name, 'Takımsız') as team_name, 
+            COALESCE(NULLIF(p.player_height, ''), '?? cm') as player_height 
+        FROM Players p
+        JOIN Teams t ON p.team_id = t.team_id
+        WHERE p.team_id = (
+            SELECT team_id 
+            FROM (
+                SELECT home_team_id AS team_id, SUM(COALESCE(home_score, 0)) AS score 
+                FROM Matches WHERE home_score IS NOT NULL GROUP BY home_team_id
+                UNION ALL
+                SELECT away_team_id AS team_id, SUM(COALESCE(away_score, 0)) AS score 
+                FROM Matches WHERE away_score IS NOT NULL GROUP BY away_team_id
+            ) AS combined_scores
+            GROUP BY team_id
+            ORDER BY SUM(score) DESC
+            LIMIT 1
         )
     """
     
-    # 2. Galibiyetsiz Hocalar (Exists/Join)
+    # 2. Galibiyetsiz Hocalar (Set Operation: EXCEPT)
+    # DEĞİŞİKLİK: Sadece maç yapıp kaybedenler değil, HİÇ KAZANMAMIŞ HERKES (Maç yapmayanlar dahil)
     q2 = """
         SELECT tr.technic_member_name, t.team_name 
         FROM technic_roster tr
         JOIN Teams t ON tr.team_id = t.team_id
-        WHERE t.team_name IN (
-            SELECT team_name FROM standings WHERE team_wins = 0
+        WHERE t.team_id IN (
+            -- Tüm Takımlar (Küme A)
+            SELECT team_id FROM Teams
+            
+            EXCEPT
+            
+            -- Kazanan Takımlar (Küme B)
+            SELECT DISTINCT team_id FROM (
+                SELECT home_team_id as team_id FROM Matches WHERE home_score > away_score
+                UNION
+                SELECT away_team_id as team_id FROM Matches WHERE away_score > home_score
+            ) as winning_teams
         )
     """
 
@@ -326,9 +351,9 @@ def players_stats_page():
         SELECT team_name, league 
         FROM Teams 
         WHERE team_id NOT IN (
-            SELECT home_team_id FROM Matches 
+            SELECT home_team_id FROM Matches WHERE home_team_id IS NOT NULL
             UNION 
-            SELECT away_team_id FROM Matches
+            SELECT away_team_id FROM Matches WHERE away_team_id IS NOT NULL
         )
     """
 
