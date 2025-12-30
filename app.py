@@ -100,9 +100,9 @@ def index():
 def players_page():
     # --- 1. Parametreleri Al ---
     search = request.args.get('search', '').strip().lower()
-    sort_by = request.args.get('sort_by', '').strip()
+    sort_by = request.args.get('sort_by', 'default').strip()
 
-    # Sayfalama Parametreleri (Varsayılan: 1. sayfa, 20 satır)
+    # Sayfalama Parametreleri
     try:
         page = int(request.args.get('page', 1))
         per_page = int(request.args.get('per_page', 20))
@@ -110,136 +110,139 @@ def players_page():
         page = 1
         per_page = 20
 
-    try:
-        # GROUP BY team_name: Aynı isimdeki takımları grupla.
-        # MIN(team_id): Her grubun ilk ID'sini al (Select kutusu için bir ID lazım).
-        query = """
-                SELECT MIN(team_id), team_name 
-                FROM Teams 
-                GROUP BY team_name 
-                ORDER BY team_name
-            """
-        teams_data = db_api.query(query)
-
-        teams_dropdown = [{'id': r[0], 'name': r[1]} for r in teams_data]
-    except Exception as e:
-        print(f"Takım listesi hatası: {e}")
-        teams_dropdown = []
-
     # Filtre Parametreleri
     selected_teams = request.args.getlist('teams')
     selected_leagues = request.args.getlist('leagues')
 
-    # --- 2. Filtre Listelerini Hazırla ---
+    # --- 2. Filtre Listelerini Hazırla (Dropdownlar için) ---
     try:
+        teams_data = db_api.query("SELECT MIN(team_id), team_name FROM Teams GROUP BY team_name ORDER BY team_name")
+        teams_dropdown = [{'id': r[0], 'name': r[1]} for r in teams_data]
+        
         all_teams = [r[0] for r in db_api.query("SELECT DISTINCT team_name FROM teams ORDER BY team_name") if r[0]]
         all_leagues = [r[0] for r in db_api.query("SELECT DISTINCT league FROM players ORDER BY league") if r[0]]
-    except:
-        all_teams, all_leagues = [], []
+    except Exception as e:
+        print(f"Liste hatası: {e}")
+        teams_dropdown, all_teams, all_leagues = [], [], []
 
-    # --- 3. SQL ile Veriyi Çek ---
-    sql = """
+    # --- 3. SQL SORGU İNŞASI (BASE QUERY) ---
+    where_clauses = ["1=1"]
+    params = []
+
+    if search:
+        where_clauses.append("p.player_name ILIKE %s")
+        params.append(f"%{search}%")
+
+    if selected_teams:
+        placeholders = ', '.join(['%s'] * len(selected_teams))
+        where_clauses.append(f"t.team_name IN ({placeholders})")
+        params.extend(selected_teams)
+
+    if selected_leagues:
+        placeholders = ', '.join(['%s'] * len(selected_leagues))
+        where_clauses.append(f"p.league IN ({placeholders})")
+        params.extend(selected_leagues)
+
+    where_sql = " AND ".join(where_clauses)
+
+    # --- 4. TOPLAM KAYIT SAYISINI BUL (COUNT QUERY) ---
+    count_sql = f"""
+        SELECT COUNT(*)
+        FROM players p
+        LEFT JOIN teams t ON p.team_id = t.team_id
+        WHERE {where_sql}
+    """
+    try:
+        total_count = db_api.query(count_sql, tuple(params))[0][0]
+    except:
+        total_count = 0
+
+    total_pages = math.ceil(total_count / per_page)
+    if page < 1: page = 1
+    if page > total_pages and total_pages > 0: page = total_pages
+    
+    offset = (page - 1) * per_page
+
+    # --- 5. SIRALAMA MANTIĞI (ORDER BY) ---
+    # Varsayılan: Takım adı, sonra oyuncu adı
+    order_clause = "t.team_name NULLS LAST, p.player_name"
+
+    if sort_by == 'name_asc':
+        order_clause = "p.player_name ASC"
+    elif sort_by == 'age_asc':
+        # Yaş (Küçük -> Büyük) aslında Doğum Tarihi (Büyük -> Küçük)
+        order_clause = "TO_DATE(NULLIF(p.player_birthdate,''), 'DD.MM.YYYY') DESC NULLS LAST"
+    elif sort_by == 'age_desc':
+        # Yaş (Büyük -> Küçük) aslında Doğum Tarihi (Küçük -> Büyük)
+        order_clause = "TO_DATE(NULLIF(p.player_birthdate,''), 'DD.MM.YYYY') ASC NULLS LAST"
+    elif sort_by == 'height_desc':
+        order_clause = "CAST(NULLIF(REGEXP_REPLACE(p.player_height, '[^0-9]', '', 'g'), '') AS INTEGER) DESC NULLS LAST"
+
+    # --- 6. ASIL VERİ SORGUSU (MAIN QUERY) ---
+    sql = f"""
         SELECT p.player_id, p.player_name, p.player_height, p.player_birthdate, 
                p.league, t.team_name, p.team_url, p.team_id,
                p.player_foot, p.player_bio
         FROM players p
         LEFT JOIN teams t ON p.team_id = t.team_id
-        WHERE 1=1
+        WHERE {where_sql}
+        ORDER BY {order_clause}
+        LIMIT %s OFFSET %s
     """
-    params = []
-
-    if search:
-        sql += " AND p.player_name ILIKE %s"
-        params.append(f"%{search}%")
-
-    if selected_teams:
-        placeholders = ', '.join(['%s'] * len(selected_teams))
-        sql += f" AND t.team_name IN ({placeholders})"
-        params.extend(selected_teams)
-
-    if selected_leagues:
-        placeholders = ', '.join(['%s'] * len(selected_leagues))
-        sql += f" AND p.league IN ({placeholders})"
-        params.extend(selected_leagues)
+    
+    query_params = tuple(params) + (per_page, offset)
 
     try:
-        rows = db_api.query(sql, tuple(params))
+        rows = db_api.query(sql, query_params)
     except Exception as e:
         print(f"SQL Hatası: {e}")
         rows = []
 
-    # --- 4. Veriyi Python Listesine Çevir ---
+    # --- 7. Veriyi Python Listesine Çevir ---
     players = []
     today = datetime.now()
 
     for row in rows:
         p_id, p_name, p_height, p_birth, p_league, t_name, t_url, t_id, p_foot, p_bio = row
 
-        age = 0
-        birth_date_obj = datetime.min
+        # Yaş Hesaplama (Görsel İçin)
+        age = "-"
         if p_birth and isinstance(p_birth, str) and len(p_birth.strip()) >= 8:
             try:
                 clean_date = p_birth.strip()
                 birth_date_obj = datetime.strptime(clean_date, "%d.%m.%Y")
-                age = today.year - birth_date_obj.year - (
+                calc_age = today.year - birth_date_obj.year - (
                             (today.month, today.day) < (birth_date_obj.month, birth_date_obj.day))
+                age = calc_age
             except:
-                age = 0
+                pass
 
         players.append({
             "player_id": p_id,
             "player_name": p_name,
             "player_height": p_height,
             "player_birthdate": p_birth,
-            "age": age if age > 0 else "-",
+            "age": age,
             "league": p_league,
             "team_name": t_name,
             "team_url": t_url,
-            "team_id": t_id,  # Bunu da sözlüğe ekledik
+            "team_id": t_id,
             "player_foot": p_foot,
-            "player_bio": p_bio,
-            "sort_date": birth_date_obj,
-            "sort_height": int(''.join(filter(str.isdigit, p_height))) if p_height and any(
-                c.isdigit() for c in p_height) else 0
+            "player_bio": p_bio
         })
 
-    # --- 5. SIRALAMA ---
-    if sort_by == 'name_asc':
-        players.sort(key=lambda x: x['player_name'].lower())
-    elif sort_by == 'age_asc':
-        players.sort(key=lambda x: x['sort_date'], reverse=True)
-    elif sort_by == 'age_desc':
-        players.sort(key=lambda x: x['sort_date'])
-    elif sort_by == 'height_desc':
-        players.sort(key=lambda x: x['sort_height'], reverse=True)
-    else:
-        players.sort(key=lambda x: (x['team_name'] or "", x['player_name']))
-
-    # --- 6. SAYFALAMA MANTIĞI (PAGINATION) ---
-    total_count = len(players)
-    total_pages = math.ceil(total_count / per_page)
-
-    # Sayfa sınırlarını kontrol et
-    if page < 1: page = 1
-    if page > total_pages and total_pages > 0: page = total_pages
-
-    # Listeyi Dilimle (Slice)
-    start_index = (page - 1) * per_page
-    end_index = start_index + per_page
-    paginated_players = players[start_index:end_index]
-
     return render_template('players_table.html',
-                           players=paginated_players,
+                           players=players,
                            teams_dropdown=teams_dropdown,
                            all_teams=all_teams,
                            all_leagues=all_leagues,
                            selected_teams=selected_teams,
                            selected_leagues=selected_leagues,
-                           # Sayfalama verilerini gönderiyoruz
                            current_page=page,
                            total_pages=total_pages,
                            per_page=per_page,
-                           total_count=total_count)
+                           total_count=total_count,
+                           sort_by=sort_by)
 
 
 # --- 7. OYUNCU İSTATİSTİKLERİ (ADVANCED QUERY) ---
