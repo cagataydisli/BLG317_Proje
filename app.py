@@ -306,7 +306,7 @@ def players_stats_page():
     q1 = """
         SELECT 
             p.player_name, 
-            COALESCE(t.team_name, 'Takımsız') as team_name, 
+            COALESCE(t.team_name, 'Takimsiz') as team_name, 
             COALESCE(NULLIF(p.player_height, ''), '?? cm') as player_height 
         FROM Players p
         JOIN Teams t ON p.team_id = t.team_id
