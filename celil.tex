@@ -1,0 +1,901 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern} % Better font rendering
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{longtable}
+\usepackage{enumitem}
+\usepackage{tabularx}
+\usepackage{fancyhdr}
+\usepackage{ifthen}
+
+% Code listing style
+\lstdefinestyle{sqlstyle}{
+    backgroundcolor=\color{gray!10},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    language=SQL,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    showstringspaces=false
+}
+
+\lstdefinestyle{pythonstyle}{
+    backgroundcolor=\color{gray!10},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    language=Python,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    literate={ş}{\c{s}}1 {ı}{\i}1 {ğ}{\u{g}}1 {ü}{{\"u}}1 {ö}{{\"o}}1 {ç}{\c{c}}1
+}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\begin{document}
+
+% --- Title Page ---
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    
+    \IfFileExists{itu_logo.png}{\includegraphics[width=0.3\textwidth]{itu_logo.png}\\[1cm]}{\vspace{1cm}} % Logo only if exists
+    
+    \Large \textbf{BLG 317E - Database Systems}\\
+    \large \textbf{CRN - 13508} \\
+    \large Fall 2025\\
+    \vspace{1.5cm}
+    
+    \rule{\linewidth}{0.5mm}\\[0.4cm]
+    \huge \textbf{Turkish Basketball Super League\\Management System}\\
+    \rule{\linewidth}{0.5mm}\\[1cm]
+    
+    \Large Team: \textit{Foreign Key}\\
+    \vspace{1.5cm}
+    
+    \textbf{Team Members:} \\[0.3cm]
+    \large
+    \begin{tabular}{ll}
+        Celil Aslan & 150210703 \\
+        Çağatay Dişli & 040210081 \\
+        Emir Şahin & 150220072 \\
+        Musa Can Turgut & 150210918 \\
+        Talip Demir & 040210514 \\
+    \end{tabular}
+    
+    \vfill
+    
+    \textbf{Instructors:} Kadir Özlem, Ali Çakmak \\[0.3cm]
+    \textbf{Teaching Assistants:} \\
+    Burcu Kartal, Elif Yıldırım, Selahaddin Şentop, Hacer Akıncı\\[0.5cm]
+    
+\end{titlepage}
+
+% --- Abstract ---
+\begin{abstract}
+This report presents the design and implementation of a comprehensive web-based database management system for the Turkish Basketball Super League (BSL). The application enables users to browse, search, filter, and manage data related to basketball teams, players, matches, technical staff, and league standings across multiple seasons from 2010 to 2025. Built using Python Flask as the backend framework and PostgreSQL as the relational database management system, the project demonstrates advanced SQL query techniques including correlated subqueries, nested queries, multi-table JOINs (4+ tables), set operations (UNION, EXCEPT, INTERSECT), and aggregations with GROUP BY and HAVING clauses. The system features a secure authentication mechanism, full CRUD operations for all entities, and is containerized using Docker for consistent deployment.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introduction}
+% ============================================================
+
+The Turkish Basketball Super League (BSL) is one of the premier professional basketball leagues in Europe, featuring top-tier teams and internationally recognized players. Managing the vast amount of data generated each season—including team rosters, match results, player statistics, and league standings—requires a robust and efficient database system.
+
+This project aims to develop a comprehensive \textbf{Basketball League Management System} that addresses the following objectives:
+
+\begin{itemize}[noitemsep]
+    \item Store and manage data for teams, players, matches, technical staff, and standings
+    \item Provide an intuitive web interface for browsing and searching records
+    \item Implement secure authentication for administrative operations
+    \item Support complex analytical queries to derive meaningful insights
+    \item Ensure data integrity through proper relational constraints
+    \item Enable historical analysis across multiple seasons (2010-2025)
+\end{itemize}
+
+The dataset used in this project is sourced from Kaggle: \textit{Turkish Basketball Super League Dataset}\footnote{\url{https://www.kaggle.com/datasets/onurulu/turkish-basketball-super-league-dataset/data}}, containing real-world data spanning 15 seasons with over 3,700 matches, 3,000 players, 600 teams (across seasons), and 2,400 technical staff members.
+
+% ============================================================
+\section{Technology Stack}
+% ============================================================
+
+The project employs a modern, industry-standard technology stack optimized for scalability, maintainability, and deployment consistency:
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{lX}
+        \toprule
+        \textbf{Component} & \textbf{Technology \& Description} \\
+        \midrule
+        \textbf{RDBMS} & \textbf{PostgreSQL 15} -- A powerful, open-source relational database known for its reliability, ACID compliance, and support for advanced SQL features including window functions, CTEs, and full-text search. \\
+        \addlinespace
+        \textbf{Backend} & \textbf{Python 3.x with Flask} -- A lightweight WSGI micro-framework providing flexibility for custom routing, templating, and extension integration. \\
+        \addlinespace
+        \textbf{Database Driver} & \textbf{psycopg2-binary 2.9.10} -- The most popular PostgreSQL adapter for Python, supporting connection pooling and parameterized queries. \\
+        \addlinespace
+        \textbf{Authentication} & \textbf{Flask-Login} with \textbf{Werkzeug} -- Secure session management and password hashing using industry-standard algorithms. \\
+        \addlinespace
+        \textbf{Frontend} & \textbf{HTML5, CSS3, JavaScript} with \textbf{Bootstrap 5.3} -- Responsive UI framework ensuring consistent appearance across devices. \\
+        \addlinespace
+        \textbf{Templating} & \textbf{Jinja2} -- Server-side templating engine integrated with Flask for dynamic HTML generation. \\
+        \addlinespace
+        \textbf{Containerization} & \textbf{Docker \& Docker Compose} -- Ensures consistent environments across development, testing, and production deployments. \\
+        \bottomrule
+    \end{tabularx}
+    \caption{Technology Stack Overview}
+\end{table}
+
+\subsection{Architecture Overview}
+
+The application follows a \textbf{three-tier architecture}:
+
+\begin{enumerate}
+    \item \textbf{Presentation Layer:} HTML templates rendered by Jinja2, styled with Bootstrap, and enhanced with JavaScript for dynamic interactions (modals, AJAX delete operations).
+    
+    \item \textbf{Application Layer:} Flask routes handling HTTP requests, form validation, session management, and business logic execution.
+    
+    \item \textbf{Data Layer:} PostgreSQL database accessed through a connection pool manager (\texttt{db.py}) providing thread-safe query execution and transaction management.
+\end{enumerate}
+
+% ============================================================
+\section{Database Design}
+% ============================================================
+
+\subsection{Entity-Relationship (ER) Diagram}
+
+The database schema was designed following relational database principles, ensuring normalization to \textbf{Third Normal Form (3NF)} to eliminate redundancy and maintain data integrity.
+
+\begin{center}
+    \IfFileExists{er_diagram.png}{%
+        \includegraphics[width=\textwidth]{er_diagram.png}
+    }{%
+        \fbox{\parbox{0.9\textwidth}{\centering\vspace{3cm}\textbf{[ER Diagram Placeholder]}\\\vspace{0.5cm}\textit{Please add er\_diagram.png to your project}\vspace{3cm}}}
+    }
+\end{center}
+
+\subsection{Entity Descriptions and Relationships}
+
+The database consists of \textbf{six main entities} with carefully defined relationships:
+
+\subsubsection{1. Users (Authentication Entity)}
+\begin{itemize}[noitemsep]
+    \item \textbf{Purpose:} Stores credentials for system administrators
+    \item \textbf{Primary Key:} \texttt{id} (SERIAL, auto-incremented)
+    \item \textbf{Attributes:} \texttt{username} (UNIQUE), \texttt{password\_hash} (bcrypt hashed)
+    \item \textbf{Relationships:} Independent entity (no foreign keys)
+\end{itemize}
+
+\subsubsection{2. Teams (Core Reference Entity)}
+\begin{itemize}[noitemsep]
+    \item \textbf{Purpose:} Central entity representing basketball teams per season
+    \item \textbf{Primary Key:} \texttt{team\_id} (INT)
+    \item \textbf{Attributes:} 
+    \begin{itemize}[noitemsep]
+        \item \texttt{team\_name}, \texttt{team\_city}, \texttt{team\_year} (founding year)
+        \item \texttt{league} (season identifier, e.g., "bsl-2024-2025")
+        \item \texttt{team\_url} (official website link)
+        \item \texttt{saloon\_name}, \texttt{saloon\_capacity}, \texttt{saloon\_address} (venue info)
+        \item \texttt{staff\_id} (FK to technic\_roster -- head coach reference)
+    \end{itemize}
+    \item \textbf{Key Insight:} Teams are duplicated per season with unique \texttt{team\_id} values, allowing historical tracking while maintaining referential integrity.
+\end{itemize}
+
+\subsubsection{3. Players}
+\begin{itemize}[noitemsep]
+    \item \textbf{Purpose:} Stores athlete information and physical attributes
+    \item \textbf{Primary Key:} \texttt{player\_id} (INT)
+    \item \textbf{Foreign Key:} \texttt{team\_id} $\rightarrow$ Teams(\texttt{team\_id})
+    \item \textbf{Attributes:} \texttt{player\_name}, \texttt{player\_height}, \texttt{player\_birthdate}, \texttt{player\_foot}, \texttt{player\_bio}, \texttt{league}
+    \item \textbf{Relationship:} \textbf{Many-to-One} with Teams (many players belong to one team)
+\end{itemize}
+
+\subsubsection{4. Matches}
+\begin{itemize}[noitemsep]
+    \item \textbf{Purpose:} Records game details and results
+    \item \textbf{Primary Key:} \texttt{match\_id} (VARCHAR, format: "1EA" + number)
+    \item \textbf{Foreign Keys:} 
+    \begin{itemize}[noitemsep]
+        \item \texttt{home\_team\_id} $\rightarrow$ Teams(\texttt{team\_id})
+        \item \texttt{away\_team\_id} $\rightarrow$ Teams(\texttt{team\_id})
+    \end{itemize}
+    \item \textbf{Attributes:} \texttt{match\_date}, \texttt{match\_hour}, \texttt{home\_score}, \texttt{away\_score}, \texttt{league}, \texttt{match\_week}, \texttt{match\_city}, \texttt{match\_saloon}
+    \item \textbf{Constraint:} \texttt{CHECK (home\_team\_id <> away\_team\_id)} -- prevents self-matches
+    \item \textbf{Relationship:} \textbf{Many-to-Two} with Teams (each match involves exactly two teams)
+\end{itemize}
+
+\subsubsection{5. Technic\_Roster (Technical Staff)}
+\begin{itemize}[noitemsep]
+    \item \textbf{Purpose:} Manages coaching and support staff data
+    \item \textbf{Primary Key:} \texttt{staff\_id} (SERIAL)
+    \item \textbf{Foreign Key:} \texttt{team\_id} $\rightarrow$ Teams(\texttt{team\_id}) ON DELETE SET NULL
+    \item \textbf{Attributes:} \texttt{technic\_member\_name}, \texttt{technic\_member\_role}, \texttt{league}, \texttt{team\_url}
+    \item \textbf{Relationship:} \textbf{Many-to-One} with Teams
+\end{itemize}
+
+\subsubsection{6. Standings}
+\begin{itemize}[noitemsep]
+    \item \textbf{Purpose:} Stores league rankings and performance metrics
+    \item \textbf{Primary Key:} Composite (\texttt{league}, \texttt{team\_name})
+    \item \textbf{Foreign Key:} \texttt{team\_id} $\rightarrow$ Teams(\texttt{team\_id}) ON DELETE CASCADE
+    \item \textbf{Attributes:} \texttt{team\_rank}, \texttt{team\_matches\_played}, \texttt{team\_wins}, \texttt{team\_losses}, \texttt{team\_points\_scored}, \texttt{team\_points\_conceded}, \texttt{team\_total\_points}, \texttt{team\_total\_goal\_difference}
+    \item \textbf{Relationship:} \textbf{One-to-One per Season} with Teams
+\end{itemize}
+
+\subsection{Database Schema (DDL)}
+
+\begin{lstlisting}[style=sqlstyle, caption={Core Table Definitions}]
+-- Users Table (Authentication)
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) UNIQUE NOT NULL,
+    password_hash VARCHAR(256) NOT NULL
+);
+
+-- Teams Table (Central Reference)
+CREATE TABLE Teams (
+    team_id INT PRIMARY KEY,
+    staff_id INT,
+    team_url VARCHAR(255),
+    team_name VARCHAR(100),
+    league VARCHAR(64),
+    team_city VARCHAR(64),
+    team_year INT,
+    saloon_name VARCHAR(128),
+    saloon_capacity INT,
+    saloon_address TEXT
+);
+
+-- Matches Table
+CREATE TABLE Matches (
+    match_id VARCHAR(16) NOT NULL PRIMARY KEY,
+    home_team_id INT NOT NULL,
+    away_team_id INT NOT NULL,
+    match_date DATE NULL,
+    match_hour TIME NULL,
+    home_score SMALLINT NULL,
+    away_score SMALLINT NULL,
+    league VARCHAR(64) NULL,
+    match_week VARCHAR(16) NULL,
+    match_city VARCHAR(64) NULL,
+    match_saloon VARCHAR(128) NULL,
+    CONSTRAINT fk_matches_home FOREIGN KEY (home_team_id) 
+        REFERENCES Teams(team_id),
+    CONSTRAINT fk_matches_away FOREIGN KEY (away_team_id) 
+        REFERENCES Teams(team_id),
+    CONSTRAINT chk_distinct_teams CHECK (home_team_id <> away_team_id)
+);
+\end{lstlisting}
+
+\subsection{Performance Indexes}
+
+Strategic indexes were created to optimize query performance:
+
+\begin{lstlisting}[style=sqlstyle, caption={Performance Indexes}]
+-- Matches indexes for filtering and sorting
+CREATE INDEX idx_matches_home_team ON Matches(home_team_id);
+CREATE INDEX idx_matches_away_team ON Matches(away_team_id);
+CREATE INDEX idx_matches_league ON Matches(league);
+CREATE INDEX idx_matches_date ON Matches(match_date);
+CREATE INDEX idx_matches_city ON Matches(match_city);
+CREATE INDEX idx_matches_week ON Matches(match_week);
+CREATE INDEX idx_matches_dedup ON Matches(match_date, home_team_id, away_team_id);
+
+-- Teams indexes
+CREATE INDEX idx_teams_name ON Teams(team_name);
+CREATE INDEX idx_teams_league ON Teams(league);
+
+-- Technic roster index
+CREATE INDEX idx_technic_team ON technic_roster(team_id);
+\end{lstlisting}
+
+% ============================================================
+\section{Dataset Description}
+% ============================================================
+
+\subsection{Data Source and Scope}
+
+The project utilizes the \textbf{Turkish Basketball Super League Dataset} from Kaggle, containing comprehensive data spanning \textbf{15 seasons} (2010-2025).
+
+\begin{table}[H]
+    \centering
+    \begin{tabular}{lrrp{6cm}}
+        \toprule
+        \textbf{CSV File} & \textbf{Records} & \textbf{Columns} & \textbf{Description} \\
+        \midrule
+        \texttt{team\_data.csv} & 638 & 9 & Team info per season (name, city, venue) \\
+        \texttt{player\_data.csv} & 3,048 & 7 & Player roster with physical attributes \\
+        \texttt{matches.csv} & 3,754 & 11 & Match results and schedules \\
+        \texttt{technic\_roster.csv} & 2,404 & 5 & Coaching and support staff \\
+        \texttt{standings.csv} & 240 & 12 & League rankings and statistics \\
+        \bottomrule
+    \end{tabular}
+    \caption{Dataset Statistics}
+\end{table}
+
+\subsection{Data Quality Challenges}
+
+The raw CSV data presented several challenges that required preprocessing:
+
+\begin{enumerate}
+    \item \textbf{Height Format Inconsistency:} Values like "190 cm", "1.90m", "unknown", or empty strings
+    \item \textbf{Date Format Variations:} Dates in "DD.MM.YYYY" format with trailing spaces
+    \item \textbf{Capacity Strings:} Values like "2500 Kişi" (2500 People) requiring extraction
+    \item \textbf{Missing Foreign Keys:} Some players referenced non-existent team IDs
+\end{enumerate}
+
+\subsection{Data Cleaning Implementation}
+
+\begin{lstlisting}[style=pythonstyle, caption={Data Cleaning Functions}]
+def _extract_first_int(s: str) -> Optional[int]:
+    """Extract numeric value from strings like '2500 Kisi' or '190 cm'"""
+    if s is None:
+        return None
+    clean_s = str(s).replace('.', '').replace(',', '')
+    m = re.search(r'-?\d+', clean_s)
+    return int(m.group()) if m else None
+
+def teams_row_converter(row: dict) -> tuple:
+    """Custom converter handling team data normalization"""
+    t_id = _extract_first_int(row.get('team_id'))
+    year = _extract_first_int(row.get('team_year'))
+    cap = _extract_first_int(row.get('saloon_capacity'))
+    # ... string fields cleaned and returned
+    return (t_id, url, name, league, city, year, s_name, cap, addr)
+\end{lstlisting}
+
+\subsection{Database Connection Configuration}
+
+The application uses environment variables for secure credential management:
+
+\begin{lstlisting}[style=pythonstyle, caption={Database Connection Pool}]
+DATABASE_URL = os.environ.get("DATABASE_URL")
+# Format: postgresql://user:password@host:port/database
+
+_pool = pool.SimpleConnectionPool(minconn=1, maxconn=5, dsn=DATABASE_URL)
+
+def query(sql, params=None):
+    conn = get_conn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params or ())
+            return cur.fetchall()
+    finally:
+        put_conn(conn)
+\end{lstlisting}
+
+Docker Compose orchestrates the services:
+
+\begin{lstlisting}[language=bash, caption={Docker Compose Configuration}]
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      retries: 12
+
+  web:
+    build: .
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    depends_on:
+      db:
+        condition: service_healthy
+\end{lstlisting}
+
+% ============================================================
+\section{Website Functionalities and Navigation}
+% ============================================================
+
+\subsection{Application Structure}
+
+The web application provides a comprehensive interface with the following main modules:
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.9\textwidth}{
+        \textbf{Navigation Bar:} \\
+        \texttt{[Basketball DB] | Players | Teams | Matches | Technic Staff | Standings | [Login/Logout]}
+    }}
+    \caption{Main Navigation Structure}
+\end{figure}
+
+\subsection{Authentication System}
+
+The application implements secure user authentication using Flask-Login:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Registration:} New users can create accounts with hashed passwords (Werkzeug)
+    \item \textbf{Login:} Session-based authentication with flash message feedback
+    \item \textbf{Protected Routes:} CRUD operations require \texttt{@login\_required} decorator
+    \item \textbf{Logout:} Secure session termination
+\end{itemize}
+
+\begin{lstlisting}[style=pythonstyle, caption={Authentication Implementation}]
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        sql = r'SELECT id, username, password_hash FROM users WHERE username = %s'
+        user_data = db_api.query(sql, (username,))
+        
+        if user_data and check_password_hash(user_data[0][2], password):
+            user_obj = User(user_data[0][0], user_data[0][1], user_data[0][2])
+            login_user(user_obj)
+            flash('Login successful!', 'success')
+            return redirect(url_for('index'))
+        
+        flash('Invalid username or password', 'danger')
+    return render_template('login.html')
+\end{lstlisting}
+
+\subsection{Players Module (Çağatay Dişli)}
+
+\subsubsection{Features}
+\begin{itemize}
+    \item \textbf{Paginated List View:} Configurable display (20/50/100/All rows)
+    \item \textbf{Multi-Filter System:} Filter by Team (checkbox), League (checkbox)
+    \item \textbf{Search:} Real-time player name search with ILIKE pattern matching
+    \item \textbf{Sorting:} Name (A-Z), Age (ascending/descending), Height (tallest first)
+    \item \textbf{CRUD Operations:} Add, Edit, Delete players (authenticated users only)
+    \item \textbf{Advanced Statistics Page:} Complex analytical queries
+\end{itemize}
+
+\subsubsection{Advanced Statistics (Correlated Subqueries)}
+
+\begin{lstlisting}[style=sqlstyle, caption={Players Taller Than Team Average (Correlated Subquery)}]
+SELECT 
+    p.player_name, 
+    p.player_height, 
+    t.team_name, 
+    (
+        SELECT AVG(CAST(NULLIF(regexp_replace(p2.player_height, 
+               '[^0-9]', '', 'g'), '') AS INTEGER)) 
+        FROM Players p2 
+        WHERE p2.team_id = p.team_id
+    ) as team_avg_height
+FROM Players p
+JOIN Teams t ON p.team_id = t.team_id
+WHERE 
+    CAST(NULLIF(regexp_replace(p.player_height, '[^0-9]', '', 'g'), '') 
+         AS INTEGER) > (
+        SELECT AVG(CAST(NULLIF(regexp_replace(p3.player_height, 
+               '[^0-9]', '', 'g'), '') AS INTEGER)) 
+        FROM Players p3 
+        WHERE p3.team_id = p.team_id
+    )
+ORDER BY t.team_name, p.player_name;
+\end{lstlisting}
+
+\subsection{Teams Module (Musa Can Turgut)}
+
+\subsubsection{Features}
+\begin{itemize}
+    \item \textbf{Season Filter:} Dropdown to select specific seasons (bsl-2024-2025, etc.)
+    \item \textbf{Team Details:} Name, city, founding year, arena information, capacity
+    \item \textbf{Staff Link:} Reference to head coach via \texttt{staff\_id}
+    \item \textbf{Player Roster:} Click team name to view all players
+    \item \textbf{CRUD Operations:} Full management capabilities
+\end{itemize}
+
+\subsubsection{Team Players View}
+Includes age statistics calculated from birthdates:
+\begin{itemize}[noitemsep]
+    \item Total player count
+    \item Average team age
+    \item Youngest and oldest players
+\end{itemize}
+
+\subsection{Matches Module (Celil Aslan)}
+
+The most complex module demonstrating advanced SQL techniques:
+
+\subsubsection{Filtering Options}
+\begin{itemize}
+    \item \textbf{Team Filters:} Home Team, Away Team, Any Team Involved
+    \item \textbf{Location Filters:} City, Arena/Saloon
+    \item \textbf{Date Filters:} Date range, Quick presets (Today, Last Week, Last Month)
+    \item \textbf{Score Filters:} Home Wins, Away Wins, High Scoring ($>$180), Close Games ($\leq$5 pts), Blowouts ($\geq$20 pts)
+    \item \textbf{Match Status:} Played vs Unplayed
+    \item \textbf{Week Selection:} Multi-select checkboxes for match weeks
+\end{itemize}
+
+\subsubsection{Quick Stats Dashboard}
+Real-time statistics displayed at the top:
+\begin{itemize}[noitemsep]
+    \item Total matches played
+    \item Home wins (count and percentage)
+    \item Away wins (count and percentage)
+    \item Average total points per game
+    \item Highest scoring game
+\end{itemize}
+
+\subsubsection{Complex Query: 4+ Table JOIN}
+
+\begin{lstlisting}[style=sqlstyle, caption={4-Table JOIN: Matches with Standings Data}]
+SELECT 
+    m.match_id,
+    t1.team_name AS home_team,
+    t2.team_name AS away_team,
+    m.home_score,
+    m.away_score,
+    COALESCE(s1.team_rank, 0) AS home_team_rank,
+    COALESCE(s2.team_rank, 0) AS away_team_rank,
+    COALESCE(s1.team_wins, 0) AS home_team_wins,
+    COALESCE(s2.team_wins, 0) AS away_team_wins
+FROM Matches m
+INNER JOIN Teams t1 ON m.home_team_id = t1.team_id
+INNER JOIN Teams t2 ON m.away_team_id = t2.team_id
+LEFT OUTER JOIN Standings s1 ON t1.team_name = s1.team_name 
+    AND m.league = s1.league
+LEFT OUTER JOIN Standings s2 ON t2.team_name = s2.team_name 
+    AND m.league = s2.league
+WHERE m.home_score IS NOT NULL AND m.league = %s
+ORDER BY m.match_date DESC
+LIMIT 10;
+\end{lstlisting}
+
+\subsubsection{Set Operations (UNION)}
+
+\begin{lstlisting}[style=sqlstyle, caption={UNION: All Winning Teams (Home and Away)}]
+WITH home_wins AS (
+    SELECT DISTINCT t.team_name, 'Home Win' AS win_type, 
+           m.match_date, m.home_score, m.away_score
+    FROM Matches m
+    JOIN Teams t ON m.home_team_id = t.team_id
+    WHERE m.home_score > m.away_score
+),
+away_wins AS (
+    SELECT DISTINCT t.team_name, 'Away Win' AS win_type,
+           m.match_date, m.away_score, m.home_score
+    FROM Matches m
+    JOIN Teams t ON m.away_team_id = t.team_id  
+    WHERE m.away_score > m.home_score
+)
+SELECT * FROM home_wins
+UNION ALL
+SELECT * FROM away_wins
+ORDER BY match_date DESC;
+\end{lstlisting}
+
+\subsubsection{EXCEPT Operation: Winless Coaches}
+
+\begin{lstlisting}[style=sqlstyle, caption={EXCEPT: Teams That Never Won}]
+SELECT tr.technic_member_name, t.team_name 
+FROM technic_roster tr
+JOIN Teams t ON tr.team_id = t.team_id
+WHERE t.team_id IN (
+    -- All Teams
+    SELECT team_id FROM Teams
+    EXCEPT
+    -- Teams That Have Won
+    SELECT DISTINCT team_id FROM (
+        SELECT home_team_id as team_id FROM Matches 
+        WHERE home_score > away_score
+        UNION
+        SELECT away_team_id as team_id FROM Matches 
+        WHERE away_score > home_score
+    ) as winning_teams
+);
+\end{lstlisting}
+
+\subsection{Technical Staff Module (Musa Can Turgut)}
+
+\subsubsection{Features}
+\begin{itemize}
+    \item \textbf{Search Filters:} Name, Role, Team, League
+    \item \textbf{Role Categories:} Head Coach, Assistant Coach, Team Manager, Physiotherapist, etc.
+    \item \textbf{Pagination:} 20 records per page
+    \item \textbf{CRUD Operations:} Full management for authenticated users
+\end{itemize}
+
+\subsection{Standings Module (Emir Şahin)}
+
+\subsubsection{Features}
+\begin{itemize}
+    \item \textbf{Sortable Columns:} Click headers to sort ascending/descending
+    \item \textbf{Advanced Filters:}
+    \begin{itemize}[noitemsep]
+        \item League selection
+        \item Team name search (ILIKE)
+        \item Rank filter with IN clause (e.g., "1,2,3")
+        \item Numeric filters with operators ($>, <, \geq, \leq$)
+    \end{itemize}
+    \item \textbf{Statistics:} Wins, Losses, Points Scored/Conceded, Goal Difference
+\end{itemize}
+
+\subsubsection{Numeric Filter Implementation}
+
+\begin{lstlisting}[style=pythonstyle, caption={Dynamic Numeric Filter Parser}]
+def parse_numeric_filter(col_name, value, where_clauses, params):
+    """Parse user input: <20, >50, >=10, 15"""
+    if not value:
+        return
+    value = value.strip()
+    
+    if value.startswith(">="):
+        operator, val = ">=", value[2:]
+    elif value.startswith("<="):
+        operator, val = "<=", value[2:]
+    elif value.startswith(">"):
+        operator, val = ">", value[1:]
+    elif value.startswith("<"):
+        operator, val = "<", value[1:]
+    else:
+        operator, val = "=", value
+    
+    if val.isdigit():
+        where_clauses.append(f"{col_name} {operator} %s")
+        params.append(int(val))
+\end{lstlisting}
+
+% ============================================================
+\section{Individual Contributions}
+% ============================================================
+
+\begin{longtable}{p{3cm}p{11cm}}
+    \toprule
+    \textbf{Member} & \textbf{Contributions and Responsibilities} \\
+    \midrule
+    \endhead
+    
+    \textbf{Celil Aslan} \newline (150210703) & 
+    \textbf{Matches Module Owner}
+    \begin{itemize}[noitemsep, topsep=0pt]
+        \item Designed and implemented the complete Matches module with 15+ filter options
+        \item Created complex analytics dashboard with Quick Stats
+        \item Implemented 4+ table JOINs combining Matches, Teams, and Standings
+        \item Developed Set Operations (UNION, EXCEPT) for win analysis
+        \item Built nested subqueries for above-average performance detection
+        \item Implemented head-to-head statistics with normalized team pairs
+        \item Created home vs. away performance comparison analytics
+    \end{itemize} \\
+    \midrule
+    
+    \textbf{Çağatay Dişli} \newline (040210081) & 
+    \textbf{Players Module Owner}
+    \begin{itemize}[noitemsep, topsep=0pt]
+        \item Developed full CRUD system for player management
+        \item Implemented multi-filter interface with checkbox selection
+        \item Created pagination system with configurable page sizes
+        \item Designed correlated subquery for "taller than team average" analysis
+        \item Built nested query to find highest-scoring team's players
+        \item Implemented age calculation from birthdate strings
+        \item Created sorting logic for Name, Age, and Height
+    \end{itemize} \\
+    \midrule
+    
+    \textbf{Emir Şahin} \newline (150220072) & 
+    \textbf{UI/UX Lead \& Standings Module}
+    \begin{itemize}[noitemsep, topsep=0pt]
+        \item Designed responsive UI using Bootstrap 5.3
+        \item Implemented secure authentication system (Flask-Login)
+        \item Created base template with navigation and flash messages
+        \item Developed Standings module with sortable columns
+        \item Built numeric filter parser supporting comparison operators
+        \item Performed comprehensive system testing
+        \item Managed Docker configuration for deployment
+    \end{itemize} \\
+    \midrule
+    
+    \textbf{Musa Can Turgut} \newline (150210918) & 
+    \textbf{Teams \& Staff Modules Owner}
+    \begin{itemize}[noitemsep, topsep=0pt]
+        \item Developed Teams module with season-based filtering
+        \item Created team-player relationship view with age statistics
+        \item Implemented Technical Staff module with role-based filtering
+        \item Managed venue (saloon) data relationships
+        \item Built staff-team linkage through foreign key management
+        \item Designed modal forms for Add/Edit operations
+    \end{itemize} \\
+    \midrule
+    
+    \textbf{Talip Demir} \newline (040210514) & 
+    \textbf{Database Architect}
+    \begin{itemize}[noitemsep, topsep=0pt]
+        \item Designed ER diagram and relational schema
+        \item Ensured Third Normal Form (3NF) compliance
+        \item Defined primary keys, foreign keys, and constraints
+        \item Created performance indexes for query optimization
+        \item Implemented data import system (\texttt{init\_db.py})
+        \item Designed CSV data cleaning and type conversion functions
+        \item Managed schema evolution and integrity constraints
+    \end{itemize} \\
+    \bottomrule
+    \caption{Individual Contributions Summary}
+\end{longtable}
+
+% ============================================================
+\section{SQL Query Techniques Demonstrated}
+% ============================================================
+
+The project showcases various advanced SQL techniques required by the course:
+
+\begin{table}[H]
+    \centering
+    \begin{tabularx}{\textwidth}{lXl}
+        \toprule
+        \textbf{Technique} & \textbf{Description} & \textbf{Location} \\
+        \midrule
+        Correlated Subquery & Players taller than their team average & Players Stats \\
+        Nested Query & Finding highest-scoring team's roster & Players Stats \\
+        4+ Table JOIN & Matches + 2×Teams + 2×Standings & Matches Analytics \\
+        LEFT OUTER JOIN & Teams without matches/staff & Multiple modules \\
+        UNION & Combining home and away wins & Matches Analytics \\
+        EXCEPT & Finding winless teams/coaches & Players Stats \\
+        GROUP BY + HAVING & Team performance aggregation & Matches Analytics \\
+        Window Functions & ROW\_NUMBER for deduplication & Matches Analytics \\
+        CTEs & Common Table Expressions for readability & Throughout \\
+        IN with Subquery & Rank filtering with comma-separated values & Standings \\
+        \bottomrule
+    \end{tabularx}
+    \caption{SQL Techniques Used in the Project}
+\end{table}
+
+% ============================================================
+\section{Challenges and Solutions}
+% ============================================================
+
+\subsection{Challenge 1: Data Quality Issues}
+
+\textbf{Problem:} CSV data contained inconsistent formats:
+\begin{itemize}[noitemsep]
+    \item Heights: "190 cm", "unknown", empty strings
+    \item Capacities: "2500 Kişi" instead of numeric values
+    \item Dates: Trailing spaces, various formats
+\end{itemize}
+
+\textbf{Solution:} Implemented robust regex-based extraction:
+\begin{lstlisting}[style=pythonstyle]
+def _extract_first_int(s: str) -> Optional[int]:
+    clean_s = str(s).replace('.', '').replace(',', '')
+    m = re.search(r'-?\d+', clean_s)
+    return int(m.group()) if m else None
+\end{lstlisting}
+
+\subsection{Challenge 2: Duplicate Match Records}
+
+\textbf{Problem:} The dataset contained matches recorded twice with swapped home/away teams, causing inflated statistics.
+
+\textbf{Solution:} Used window functions with normalized team pair partitioning:
+\begin{lstlisting}[style=sqlstyle]
+WITH ranked_matches AS (
+    SELECT m.*,
+           ROW_NUMBER() OVER (
+               PARTITION BY m.match_date,
+                            LEAST(m.home_team_id, m.away_team_id),
+                            GREATEST(m.home_team_id, m.away_team_id)
+               ORDER BY m.match_id
+           ) as rn
+    FROM Matches m
+)
+SELECT * FROM ranked_matches WHERE rn = 1;
+\end{lstlisting}
+
+\subsection{Challenge 3: Docker Database Timing}
+
+\textbf{Problem:} Flask application started before PostgreSQL was ready, causing connection errors.
+
+\textbf{Solution:} Implemented health checks in Docker Compose:
+\begin{lstlisting}[basicstyle=\ttfamily\small, frame=single, backgroundcolor=\color{gray!10}]
+healthcheck:
+  test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
+  interval: 5s
+  timeout: 5s
+  retries: 12
+
+depends_on:
+  db:
+    condition: service_healthy
+\end{lstlisting}
+
+\subsection{Challenge 4: Foreign Key Violations During Import}
+
+\textbf{Problem:} Some player records referenced non-existent team IDs.
+
+\textbf{Solution:} Row-by-row insertion with error handling:
+\begin{lstlisting}[style=pythonstyle]
+if spec.name.lower() in ("matches", "players"):
+    for row in rows:
+        try:
+            cur.execute(sql, row)
+            inserted_count += 1
+        except Exception:
+            conn.rollback()
+            continue  # Skip invalid rows
+\end{lstlisting}
+
+\subsection{Challenge 5: Age Calculation from String Dates}
+
+\textbf{Problem:} Birthdates stored as strings in "DD.MM.YYYY" format with inconsistent data.
+
+\textbf{Solution:} Safe date parsing with fallback:
+\begin{lstlisting}[style=pythonstyle]
+def calculate_age(birthdate_str):
+    if not birthdate_str or len(birthdate_str.strip()) < 8:
+        return "-"
+    try:
+        birth_date = datetime.strptime(birthdate_str.strip(), "%d.%m.%Y")
+        today = datetime.now()
+        age = today.year - birth_date.year - (
+            (today.month, today.day) < (birth_date.month, birth_date.day)
+        )
+        return age
+    except:
+        return "-"
+\end{lstlisting}
+
+% ============================================================
+\section{Conclusion}
+% ============================================================
+
+This project successfully demonstrates the design and implementation of a comprehensive database management system for the Turkish Basketball Super League. Key achievements include:
+
+\begin{enumerate}
+    \item \textbf{Robust Database Design:} A normalized schema (3NF) with six interconnected entities supporting 15 years of historical data.
+    
+    \item \textbf{Advanced SQL Implementation:} Extensive use of correlated subqueries, nested queries, 4+ table JOINs, set operations (UNION, EXCEPT), and aggregations with GROUP BY/HAVING.
+    
+    \item \textbf{Full-Featured Web Application:} Five distinct modules (Players, Teams, Matches, Staff, Standings) with complete CRUD operations, advanced filtering, pagination, and sorting.
+    
+    \item \textbf{Secure Authentication:} Protected administrative functions with session-based login and password hashing.
+    
+    \item \textbf{Production-Ready Deployment:} Docker containerization ensuring consistent environments and easy deployment.
+    
+    \item \textbf{Data Quality Management:} Robust ETL processes handling inconsistent source data formats.
+\end{enumerate}
+
+The system provides a valuable tool for basketball enthusiasts, analysts, and administrators to explore and manage league data efficiently. Future enhancements could include real-time score updates, player performance analytics, and predictive modeling for match outcomes.
+
+% ============================================================
+\section*{Appendix A: Running the Application}
+% ============================================================
+
+\begin{lstlisting}[language=bash, caption={Deployment Commands}]
+# Navigate to project directory
+cd BLG317_Proje
+
+# Build and start containers
+docker compose up -d --build
+
+# View logs
+docker compose logs -f web
+
+# Check container status
+docker compose ps
+
+# Access application
+# Open browser: http://localhost:5000
+\end{lstlisting}
+
+\section*{Appendix B: Project Repository}
+
+The complete source code is available at: \url{https://github.com/[repository-link]}
+
+\end{document}
