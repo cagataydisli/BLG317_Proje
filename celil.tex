@@ -385,23 +385,24 @@ def query(sql, params=None):
 
 Docker Compose orchestrates the services:
 
-\begin{lstlisting}[language=bash, caption={Docker Compose Configuration}]
+\begin{lstlisting}[basicstyle=\ttfamily\footnotesize, frame=single, backgroundcolor=\color{gray!10}, breaklines=true, caption={Docker Compose Configuration}]
 services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: $POSTGRES_DB
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
       interval: 5s
       retries: 12
 
   web:
     build: .
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      DATABASE_URL: "postgresql://$POSTGRES_USER:
+                     $POSTGRES_PASSWORD@db:5432/$POSTGRES_DB"
     depends_on:
       db:
         condition: service_healthy
@@ -803,7 +804,7 @@ SELECT * FROM ranked_matches WHERE rn = 1;
 \textbf{Problem:} Flask application started before PostgreSQL was ready, causing connection errors.
 
 \textbf{Solution:} Implemented health checks in Docker Compose:
-\begin{lstlisting}[basicstyle=\ttfamily\small, frame=single, backgroundcolor=\color{gray!10}]
+\begin{lstlisting}[basicstyle=\ttfamily\small, frame=single, backgroundcolor=\color{gray!10}, breaklines=true]
 healthcheck:
   test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER"]
   interval: 5s
@@ -877,7 +878,7 @@ The system provides a valuable tool for basketball enthusiasts, analysts, and ad
 \section*{Appendix A: Running the Application}
 % ============================================================
 
-\begin{lstlisting}[language=bash, caption={Deployment Commands}]
+\begin{lstlisting}[basicstyle=\ttfamily\small, frame=single, backgroundcolor=\color{gray!10}, breaklines=true, caption={Deployment Commands}]
 # Navigate to project directory
 cd BLG317_Proje
 
